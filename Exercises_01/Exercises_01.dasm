@@ -1,0 +1,167 @@
+
+	processor 6502
+        include "vcs.h"
+        include "macro.h"
+        include "xmacro.h"
+
+	seg code
+        org $f000 ; Define the origin of the ROM code at memory address $F000
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Clean start
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Start:
+	sei ; Disable Interrupts
+        cld ; Disable BCD (Binary Code Decimal) Decimal math mode
+        ldx #$ff ; Loads the X register with the literal hex FF
+        ; Forcing the S to point to the last RAM mem position ($00FF)
+        txs ; Transfer X register to StackPointer (S) Register
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Zero the memory
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;        
+	lda #0 ; Load Accumulator (A) with literal decimal value 0
+ZeroMemLoop:
+        sta $00,X ; Store the value of A in the memory position $00 + X
+        dex ; decrement X
+        bne ZeroMemLoop ; Run the loop again if X is != $00 (the Zero (Z) flag isn't set)
+       	sta $00 ; The loop doesn't account for the position $00
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Exercise 01:
+; load the processor registers A, X, and Y with some values
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+Exercise_01:
+	lda #$82 ; Load the A register with the literal hexadecimal value $82
+        ldx #82 ; Load the X register with the literal decimal value 82
+        ldy $82 ; Load the Y register with the value that is inside memory position $82
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Exercise 02:
+; store some values into zero-page memory positions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+Exercise_02:
+	lda #$A ; Load the A register with the hexadecimal value $A
+        ldx %11111111 ; Load the X register with the binary value %11111111
+        sta $80 ; Store the value in the A register into memory address $80
+        stx $81 ; Store the value in the X register into memory address $81
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Exercise 03:
+; transferring values from registers to other registers
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+Exercise_03:
+	lda #15 ; Load the A register with the literal decimal value 15
+	tax ; Transfer the value from A to X
+	tay ; Transfer the value from A to Y
+	txa ; Transfer the value from X to A
+	tya ; Transfer the value from Y to A
+	
+        ldx #6 ; Load X with the decimal value 6
+	txa ; Transfer the value from X to Y (through A)
+        tay ;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Exercise 04:
+; adding and subtracting values
+; Adding and subtracting are math operations that are done by the ALU.
+; It can only manipulate values from the (A)ccumulator,
+; so all these additions and subtractions must bedone with the values in A
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+Exercise_04:
+	clc ; clear the carry flag
+	lda #100 ; Load the A register with the literal decimal value 100
+	adc #5 ; Add the decimal value 5 to the accumulator
+	sbc #10 ; Subtract the decimal value 10 from the accumulator
+	; Register A should now contain the decimal 95 (or $5F in hexadecimal)
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Exercise 05:
+; ADC and SBC instructions can also be used with different addressing modes.
+; Exercise 04 used ADC with immediate mode (adding a literal value directly into
+; A), but we can also ask ADC to add a value from a (zero page) memory
+; position into the accumulator
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+Exercise_05:
+	clc ; clear the carry flag
+	lda #$A ; Load the A register with the hexadecimal value $A
+	ldx %1010 ; Load the X register with the binary value %1010
+	sta $80 ; Store the value in A into (zero page) memory address $80
+	stx $81 ; Store the value in X into (zero page) memory address $81
+	lda #10 ; Load A with the decimal value 10
+	adc $80 ; Add to A the value inside RAM address $80
+	adc $81 ; Add to A the value inside RAM address $81
+ 	; A should contain (#10 + $A + %1010) = #30 (or $1E in hexadecimal)
+	sta $82 ; Store the value of A into RAM position $82
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Exercise 06:
+; increment and decrement instructions of the 6502
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Exercise_06:
+	clc ; clear the carry flag
+	lda #1 ; Load the A register with the decimal value 1
+	ldx #2 ; Load the X register with the decimal value 2
+	ldy #3 ; Load the Y register with the decimal value 3
+	inx ; Increment X
+	iny ; Increment Y
+	adc #1 ; Increment A
+ 	dex ; Decrement X
+	dey ; Decrement Y
+	sbc #1 ; Decrement A
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Exercise 07:
+; increment and decrement using zero-page addressing mode.
+; zero-page addressing mode helps directly increment and decrement values
+; inside memory positions. "zero page” in the 6502 are addresses between 0 and 255.
+; These addresses are special for the 6502 because we can store them using
+; only 1 byte (8 bits), which also means they can be done relatively fast by the CPU
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Exercise_07:
+	clc ; clear the carry flag
+	lda #10 ; Load the A register with the decimal value 10
+	sta $80 ; Store the value from A into memory position $80
+	inc $80 ; Increment the value inside a (zero page) memory position $80
+	dec $80 ; Decrement the value inside a (zero page) memory position $80
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Exercise 08:
+; create a loop that counts down from 10 to 0. You should also fill the
+; memory addresses from $80 to $8A with values from 0 to A
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Exercise_08_Init:
+	clc ; clear the carry flag
+	ldy #10 ; Initialize the Y register with the decimal value 10
+        tya ; Transfer Y to A
+	sta $80,Y ; Store the value in A inside memory position $80+Y
+        
+Exercise_08_Loop:
+	dey ; Decrement Y
+        tya ; Transfer Y to A
+	sta $80,Y ; Store the value in A inside memory position $80+Y
+	bne Exercise_08_Loop ; Branch back to "Loop" until we are done
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Exercise 09:
+; create a simple loop that goes from 1 to 10. try using the CMP instruction.
+; This instruction that can be used to compare the value of the accumulator
+; with a certain literal number. Once the comparison is done, the processor flags
+; will be set (zero if the compared values are equal, non-zero if different)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Exercise_09_Init:
+	clc ; clear the carry flag
+	lda #1 ; Initialize the A register with the decimal value 1
+
+Exercise_09_Loop:
+	adc #1 ; Increment A
+	cmp #10 ; Compare the value in A with the decimal value 10
+	bne Exercise_09_Loop ; Branch back to loop if the comparison was not equals (to zero)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; CLOSE THE CATRIDGE
+; Fill the ROM size to exactly 4KB
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        org $fffc
+        .word Start ; Reset vector at $FFFC (where the program starts)
+        .word Start ; Interrupt Vector at $FFFE (unused in the Atari VCS)
