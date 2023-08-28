@@ -42,7 +42,7 @@ Exercise_01:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
 Exercise_02:
 	lda #$A ; Load the A register with the hexadecimal value $A
-        ldx %11111111 ; Load the X register with the binary value %11111111
+        ldx #%11111111 ; Load the X register with the binary value %11111111
         sta $80 ; Store the value in the A register into memory address $80
         stx $81 ; Store the value in the X register into memory address $81
         
@@ -69,9 +69,10 @@ Exercise_03:
 ; so all these additions and subtractions must bedone with the values in A
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
 Exercise_04:
-	clc ; clear the carry flag
 	lda #100 ; Load the A register with the literal decimal value 100
+        clc ; Always clear the carry flag before calling ADC
 	adc #5 ; Add the decimal value 5 to the accumulator
+        sec ; Always Set the Carry flag before calling SBC
 	sbc #10 ; Subtract the decimal value 10 from the accumulator
 	; Register A should now contain the decimal 95 (or $5F in hexadecimal)
         
@@ -83,12 +84,12 @@ Exercise_04:
 ; position into the accumulator
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
 Exercise_05:
-	clc ; clear the carry flag
 	lda #$A ; Load the A register with the hexadecimal value $A
-	ldx %1010 ; Load the X register with the binary value %1010
+	ldx #%1010 ; Load the X register with the binary value %1010
 	sta $80 ; Store the value in A into (zero page) memory address $80
 	stx $81 ; Store the value in X into (zero page) memory address $81
 	lda #10 ; Load A with the decimal value 10
+        clc ; Always clear the carry flag before calling ADC
 	adc $80 ; Add to A the value inside RAM address $80
 	adc $81 ; Add to A the value inside RAM address $81
  	; A should contain (#10 + $A + %1010) = #30 (or $1E in hexadecimal)
@@ -99,15 +100,16 @@ Exercise_05:
 ; increment and decrement instructions of the 6502
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Exercise_06:
-	clc ; clear the carry flag
 	lda #1 ; Load the A register with the decimal value 1
 	ldx #2 ; Load the X register with the decimal value 2
 	ldy #3 ; Load the Y register with the decimal value 3
 	inx ; Increment X
 	iny ; Increment Y
+        clc ; Always clear the carry flag before calling ADC
 	adc #1 ; Increment A
  	dex ; Decrement X
 	dey ; Decrement Y
+        sec ; Always Set the Carry flag before calling SBC
 	sbc #1 ; Decrement A
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -119,7 +121,6 @@ Exercise_06:
 ; only 1 byte (8 bits), which also means they can be done relatively fast by the CPU
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Exercise_07:
-	clc ; clear the carry flag
 	lda #10 ; Load the A register with the decimal value 10
 	sta $80 ; Store the value from A into memory position $80
 	inc $80 ; Increment the value inside a (zero page) memory position $80
@@ -131,16 +132,14 @@ Exercise_07:
 ; memory addresses from $80 to $8A with values from 0 to A
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Exercise_08_Init:
-	clc ; clear the carry flag
 	ldy #10 ; Initialize the Y register with the decimal value 10
-        tya ; Transfer Y to A
-	sta $80,Y ; Store the value in A inside memory position $80+Y
         
 Exercise_08_Loop:
-	dey ; Decrement Y
         tya ; Transfer Y to A
 	sta $80,Y ; Store the value in A inside memory position $80+Y
-	bne Exercise_08_Loop ; Branch back to "Loop" until we are done
+        dey ; Decrement Y
+	bpl Exercise_08_Loop ; Branch back to "Loop" until we are done
+        ; bpl (Branch on Plus) returns true while the N (Negative) flag is not set
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Exercise 09:
@@ -150,10 +149,10 @@ Exercise_08_Loop:
 ; will be set (zero if the compared values are equal, non-zero if different)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Exercise_09_Init:
-	clc ; clear the carry flag
 	lda #1 ; Initialize the A register with the decimal value 1
 
 Exercise_09_Loop:
+	clc ; Always clear the carry flag before calling ADC
 	adc #1 ; Increment A
 	cmp #10 ; Compare the value in A with the decimal value 10
 	bne Exercise_09_Loop ; Branch back to loop if the comparison was not equals (to zero)
