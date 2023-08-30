@@ -64,7 +64,7 @@ VBlankLoop:
         ldx #192
 DrawVisibleLines:
 	sta WSYNC ; Add Wait for Horizontal Blank Synchronization
-        stx COLUBK ; Set the Background Luminance Color ($09) with the color in A
+        stx COLUBK ; Set the Background Luminance Color ($09) with the color in Y
         dex
         bne DrawVisibleLines
         
