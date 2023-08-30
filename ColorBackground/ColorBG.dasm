@@ -1,0 +1,40 @@
+
+	processor 6502
+        include "vcs.h"
+        include "macro.h"
+        include "xmacro.h"
+
+	seg code
+        org $f000
+
+Start:
+	sei ; Disable interrupts
+        cld ; Clear Binary Code Decimal Math
+        ldx #$ff ; Move the Stack Pointer to the last Memory Position
+        txs ; Move the X register to the Stack Pointer
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Clear Zero-Page Memory
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	lda #0 ; Load Accumulator with literal decimal 0
+        
+ClearMemLoop:
+	sta $00,x ; Store the value inside A in the Mem position $00 + X
+        dex ; decrement X
+        bne ClearMemLoop ; Loop until Negative flag is setted	
+        sta $00 ; Loop doesn't accounts for $00
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Color Background
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+SetBGColor:
+	lda #$ba ; Load accumulator with the color ($ba is greenish)
+        sta COLUBK ; Set the Background Luminance Color ($09) with the color in A
+        jmp SetBGColor
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Close Catridge
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	org $fffc
+        .word Start
+        .word Start
