@@ -58,9 +58,6 @@ VBlankLoop:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Start the 192 Visible scanlines!! 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	lda #2
-        sta VBLANK ; Start the Vertical Blank ($01)
-        
         ldx #192
 DrawVisibleLines:
 	sta WSYNC ; Add Wait for Horizontal Blank Synchronization
@@ -71,6 +68,8 @@ DrawVisibleLines:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Set 30 scanlines for Overscan
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	lda #2
+        sta VBLANK ; Start the Vertical Blank ($01)
 	ldx #30
 OverscanLoop:
 	sta WSYNC
