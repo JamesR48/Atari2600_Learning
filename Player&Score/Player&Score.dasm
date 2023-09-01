@@ -5,6 +5,17 @@
         include "xmacro.h"
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Start an unitialized segment at $80 for variable declaration
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	seg.u Variables
+        org $80
+P0Height ds 1 ; Defines 1 byte for Player0 height
+P1Height ds 1 ; Defines 1 byte for Player1 height
+
+Constants:
+LoopColor equ #$ba
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Init Catridge
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	seg Code
@@ -24,9 +35,6 @@ ZeroMemLoop:
         bne ZeroMemLoop
         sta $00
 
-Constants:
-LoopColor equ #$ba
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Initial setup of Background, Playfield and Players colors
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -40,6 +48,11 @@ LoopColor equ #$ba
         sta COLUP0
         lda #$4b
         sta COLUP1
+
+; Set P0Height and P1Height values
+	lda #10
+        sta P0Height
+        sta P1Height
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Start New Frame by configuring VBlank and VSync
@@ -144,7 +157,7 @@ Player0Loop:
         sta GRP0 ; Draw Player0 Graphics
         sta WSYNC
         inx
-        cpx #10 ; Loop until Compare x is equal to 10
+        cpx P0Height ; Loop until Compare x is equal to P0Height
         bne Player0Loop
         
         lda #0
@@ -161,7 +174,7 @@ Player1Loop:
         sta GRP1 ; Draw Player1 Graphics
         sta WSYNC
         inx
-        cpx #10 ; Loop until Compare x is equal to 10
+        cpx P1Height ; Loop until Compare x is equal to P1Height
         bne Player1Loop
         
         lda #0
