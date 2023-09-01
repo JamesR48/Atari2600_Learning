@@ -27,6 +27,15 @@ ZeroMemLoop:
 Constants:
 LoopColor equ #$ba
 
+	ldx #$00
+        stx COLUBK ; Set Background color
+        ldx #LoopColor
+        stx COLUPF ; Set Playfield color
+
+	; Set Control Playfield register to allow reflection        
+        ldx #%00000001 ; CTRLPF Register (D0 means reflect)
+        stx CTRLPF
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Start New Frame by configuring VBlank and VSync
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -58,15 +67,6 @@ VBlankLoop:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Here starts the 192 visible Scanlines
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	ldx #$00
-        stx COLUBK ; Set Background color
-        ldx #LoopColor
-        stx COLUPF ; Set Playfield color
-
-; Set Control Playfield register to allow reflection        
-        ldx #%00000001 ; CTRLPF Register (D0 means reflect)
-        stx CTRLPF
-
 ; Set 7 empty Scanlines (Playfield will be blank here)
 	lda #0
         sta PF0
