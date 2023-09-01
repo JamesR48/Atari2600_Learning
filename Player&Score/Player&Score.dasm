@@ -1,0 +1,265 @@
+
+	processor 6502
+        include "vcs.h"
+        include "macro.h"
+        include "xmacro.h"
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Init Catridge
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	seg Code
+        org $f000
+        
+Start:
+	sei ; Clear interrupts
+        cld ; Clear Decimal Binary Code Math
+        ldx $ff ; Set Stack Pointer to last Mem position
+        txs ; Transfer X to Stack Pointer
+        
+        ldx #$ff
+        lda #0
+ZeroMemLoop:
+	sta $00,x
+        dex
+        bne ZeroMemLoop
+        sta $00
+
+Constants:
+LoopColor equ #$ba
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Initial setup of Background, Playfield and Players colors
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #$00
+        stx COLUBK ; Set Background color
+        ldx #LoopColor
+        stx COLUPF ; Set Playfield color
+
+; Set Player0 and Player1 colors
+	lda #$0e
+        sta COLUP0
+        lda #$4b
+        sta COLUP1
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Start New Frame by configuring VBlank and VSync
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+NextFrame:
+	lda #2
+        sta VSYNC ; Turn on Vertical Synchronization
+        sta VBLANK ; Turn on Vertical Blank
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 3 empty Scanlines for VSYNC
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        sta WSYNC ; Wait (Horizontal Blank) Synchronization
+        sta WSYNC
+        sta WSYNC
+        
+        lda #0
+        sta VSYNC ; turn off VSYNC
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 37 empty Scanlines for VBLANK
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #37
+VBlankLoop:
+	sta WSYNC
+        dex
+        bne VBlankLoop
+        stx VBLANK ; turn off VBLANK
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Here starts the 192 visible Scanlines
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 10 empty Scanlines (Playfield will be blank here)
+	lda #0
+        sta PF0
+        sta PF1
+        sta PF2
+        
+        ldx #10
+UpEmpty10:
+	sta WSYNC
+	dex
+        bne UpEmpty10
+
+; Set 10 Scanlines for the Scoreboard (using the Playfield)
+; Pulls data from an array of bytes defined at NumberBitmap
+	; Set Control Playfield register to disable D0 (reflection) (for score)
+        ; Set Control Playfield to score mode (D1), so each score gets its
+        ; player's color
+	ldx #%00000010 ; CTRLPF Register (D0 means reflect)
+        stx CTRLPF
+        
+        ldx #0
+ScoreboardLoop:
+	; loop through every NumberBitmap position by X increments
+	lda NumberBitmap,X 
+        sta PF1 ; Using PF1 for the score because it's kind on the middle
+	sta WSYNC
+        inx
+	cpx #10 ; Loop until Compare x is equal to 10
+        bne ScoreboardLoop
+
+; Set 8 empty Scanlines (Playfield will be blank here)
+	lda #0
+        sta PF0
+        sta PF1
+        sta PF2
+        
+        ldx #8
+UpEmpty8:
+	sta WSYNC
+	dex
+        bne UpEmpty8
+
+; Set 50 Scanlines drawing just PF0 %0010 0000, PF1-PF2 will be blank
+        ; Init Playfield drawing params
+        ; Set Control Playfield to allow D0 (reflection) (for Playfield)
+        ; Set Control Playfield to disable D1 (score mode)
+        ldx #%00000001
+        stx CTRLPF
+        ldx #%01100000
+        stx PF0
+        
+	ldx #50
+        ;ldy LoopColor
+SidesPlayfield50:
+	; Uncomment this to loop the colors
+        ;sty COLUPF ; Set Playfield color
+	;iny
+        sta WSYNC
+        dex
+        bne SidesPlayfield50        
+
+; Set 10 Scanlines drawing player0, PF0 %0010 0000, PF1-PF2 will be blank
+; Pulls data from an array of bytes defined at PlayerBitmap
+	ldx #0
+Player0Loop:
+	; Uncomment this to loop the colors
+        ;sty COLUPF ; Set Playfield color
+	;iny
+        lda PlayerBitmap,X ; loop every PlayerBitmap position by X increments
+        sta GRP0 ; Draw Player0 Graphics
+        sta WSYNC
+        inx
+        cpx #10 ; Loop until Compare x is equal to 10
+        bne Player0Loop
+        
+        lda #0
+        sta GRP0 ; Turn off Player0 graphics
+        
+; Set 10 Scanlines drawing player1, PF0 %0010 0000, PF1-PF2 will be blank
+; Pulls data from an array of bytes defined at PlayerBitmap
+	ldx #0
+Player1Loop:
+	; Uncomment this to loop the colors
+        ;sty COLUPF ; Set Playfield color
+	;iny
+        lda PlayerBitmap,X ; loop every PlayerBitmap position by X increments
+        sta GRP1 ; Draw Player1 Graphics
+        sta WSYNC
+        inx
+        cpx #10 ; Loop until Compare x is equal to 10
+        bne Player1Loop
+        
+        lda #0
+        sta GRP1 ; Turn off Player1 graphics
+
+; Set 90 Scanlines drawing just PF0 %0010 0000, PF1-PF2 will be blank
+	ldx #90
+SidesPlayfield90:
+	; Uncomment this to loop the colors
+        ;sty COLUPF ; Set Playfield color
+	;iny
+        sta WSYNC
+        dex
+        bne SidesPlayfield90
+        
+; Set 7 Scanlines drawing PF0 %1110 0000 and PF1-PF2 %1111 1111
+        ldx #%11100000
+        stx PF0
+        ldx #%11111111
+        stx PF1
+        stx PF2
+        
+	ldx #7
+BottomPlayfield7:
+	; Uncomment this to loop the colors
+        ;sty COLUPF ; Set Playfield color
+	;iny
+        sta WSYNC
+	dex
+        bne BottomPlayfield7
+        
+; Set 7 empty Scanlines (Playfield will be blank here)
+	lda #0
+        sta PF0
+        sta PF1
+        sta PF2
+        
+        ldx #7
+BottomEmpty7:
+	sta WSYNC
+	dex
+        bne BottomEmpty7
+        
+        ; Uncomment this to Loop the colors
+        ;dec LoopColor
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 30 empty Scanlines for Overscan
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #30
+        lda #2
+        sta VBLANK ; Turn on VBLANK
+OverscanLoop:
+	sta WSYNC
+        dex
+        bne OverscanLoop
+        stx VBLANK ; turn off VBLANK
+	
+        jmp NextFrame
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Array of bytes to draw the Player graphics
+; These bytes are added in the final ROM addresses (from $FFE8-$FFF1)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	org $ffe8
+PlayerBitmap:
+	.byte #%01111110 ;  ######	; $FFE8
+        .byte #%11111111 ; ########	; $FFE9
+        .byte #%10011001 ; #  ##  #	; $FFEA
+        .byte #%10011001 ; #  ##  #	; $FFEB
+        .byte #%11111111 ; ########	; $FFEC
+        .byte #%11111111 ; ########	; $FFED
+        .byte #%11111111 ; ########	; $FFEE
+        .byte #%01100110 ;  ##  ## 	; $FFEF
+        .byte #%01100110 ;  ##  ## 	; $FFF0
+        .byte #%11100111 ; ###  ###	; $FFF1
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Array of bytes to draw the Scoreboard number (Using the Playfield)
+; These bytes are added in the final ROM addresses (from $FFF1-$FFFB)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	org $fff2
+NumberBitmap:
+	.byte #%00001110 ; ########
+        .byte #%00001110 ; ########
+        .byte #%00000010 ; 	###
+        .byte #%00000010 ; 	###
+        .byte #%00001110 ; ########
+        .byte #%00001110 ; ########
+        .byte #%00001000 ; ###
+        .byte #%00001000 ; ###
+        .byte #%00001110 ; ########
+        .byte #%00001110 ; ########
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Close Catridge
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+	org $fffc
+        .word Start	; reset vector
+        .word Start	; BRK vector
