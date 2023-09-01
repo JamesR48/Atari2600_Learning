@@ -23,7 +23,10 @@ ZeroMemLoop:
         dex
         bne ZeroMemLoop
         sta $00
-	
+
+Constants:
+LoopColor equ #$ba
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Start New Frame by configuring VBlank and VSync
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -57,15 +60,89 @@ VBlankLoop:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	ldx #$00
         stx COLUBK ; Set Background color
-        ldx #$ba
+        ldx #LoopColor
         stx COLUPF ; Set Playfield color
 
 ; Set Control Playfield register to allow reflection        
         ldx #%00000001 ; CTRLPF Register (D0 means reflect)
         stx CTRLPF
 
-	ldx #%0001000
+; Set 7 empty Scanlines (Playfield will be blank here)
+	lda #0
+        sta PF0
+        sta PF1
+        sta PF2
+        
+        ldx #7
+UpEmpty7:
+	sta WSYNC
+	dex
+        bne UpEmpty7
+
+; Set 7 Scanlines drawing PF0 %1110 0000 and PF1-PF2 %1111 1111
+	ldx #%11100000
         stx PF0
+        ldx #%11111111
+        stx PF1
+        stx PF2
+        
+        ; Uncomment this to loop the colors
+        ; ldy LoopColor
+	ldx #7
+UpPlayfield7:
+	; Uncomment this to loop the colors
+        ; sty COLUPF ; Set Playfield color
+	; iny
+	sta WSYNC
+	dex
+        bne UpPlayfield7
+        
+; Set 164 Scanlines drawing just PF0 %0010 0000, PF1-PF2 will be blank
+        ldx #%00100000
+        stx PF0
+        ldx #0
+        stx PF1
+        stx PF2
+        
+	ldx #164
+SidesPlayfield164:
+	; Uncomment this to loop the colors
+        ; sty COLUPF ; Set Playfield color
+	; iny
+        sta WSYNC
+        dex
+        bne SidesPlayfield164
+        
+; Set 7 Scanlines drawing PF0 %1110 0000 and PF1-PF2 %1111 1111
+        ldx #%11100000
+        stx PF0
+        ldx #%11111111
+        stx PF1
+        stx PF2
+        
+	ldx #7
+BottomPlayfield7:
+	; Uncomment this to loop the colors
+        ; sty COLUPF ; Set Playfield color
+	; iny
+        sta WSYNC
+	dex
+        bne BottomPlayfield7
+        
+; Set 7 empty Scanlines (Playfield will be blank here)
+	lda #0
+        sta PF0
+        sta PF1
+        sta PF2
+        
+        ldx #7
+BottomEmpty7:
+	sta WSYNC
+	dex
+        bne BottomEmpty7
+        
+        ; Uncomment this to Loop the colors
+        ; dec LoopColor
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Set 30 empty Scanlines for Overscan
