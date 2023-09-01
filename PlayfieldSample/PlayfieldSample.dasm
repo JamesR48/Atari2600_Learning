@@ -1,0 +1,90 @@
+
+	processor 6502
+        include "vcs.h"
+        include "macro.h"
+        include "xmacro.h"
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Init Catridge
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	seg Code
+        org $f000
+        
+Start:
+	sei ; Clear interrupts
+        cld ; Clear Decimal Binary Code Math
+        ldx $ff ; Set Stack Pointer to last Mem position
+        txs ; Transfer X to Stack Pointer
+        
+        ldx #$ff
+        lda #0
+ZeroMemLoop:
+	sta $00,x
+        dex
+        bne ZeroMemLoop
+        sta $00
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Start New Frame by configuring VBlank and VSync
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+NextFrame:
+	lda #2
+        sta VSYNC ; Turn on Vertical Synchronization
+        sta VBLANK ; Turn on Vertical Blank
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 3 empty Scanlines for VSYNC
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        sta WSYNC ; Wait (Horizontal Blank) Synchronization
+        sta WSYNC
+        sta WSYNC
+        
+        lda #0
+        sta VSYNC ; turn off VSYNC
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 37 empty Scanlines for VBLANK
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #37
+VBlankLoop:
+	sta WSYNC
+        dex
+        bne VBlankLoop
+        stx VBLANK ; turn off VBLANK
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Here starts the 192 visible Scanlines
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #$00
+        stx COLUBK ; Set Background color
+        ldx #$ba
+        stx COLUPF ; Set Playfield color
+
+; Set Control Playfield register to allow reflection        
+        ldx #%00000001 ; CTRLPF Register (D0 means reflect)
+        stx CTRLPF
+
+	ldx #%0001000
+        stx PF0
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 30 empty Scanlines for Overscan
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #30
+        lda #2
+        sta VBLANK ; Turn on VBLANK
+OverscanLoop:
+	sta WSYNC
+        dex
+        bne OverscanLoop
+        stx VBLANK ; turn off VBLANK
+	
+        jmp NextFrame
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Close Catridge
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+	org $fffc
+        .word Start	; reset vector
+        .word Start	; BRK vector
