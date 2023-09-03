@@ -93,9 +93,7 @@ LoadBitmap:
         sta COLUP0 ; Set the P0 color for this Scanline
         dex
         bne Scanline ; Repeat next Scanline until finish the 192
-        
-        dec P0PosY ; Decrement P0 Y position each frame to make it fall
-        
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Set 30 empty Scanlines for Overscan
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -106,7 +104,8 @@ OverscanLoop:
 	sta WSYNC
         dex
         bne OverscanLoop
-        stx VBLANK ; turn off VBLANK
+
+	dec P0PosY ; Decrement Player0 Y position each frame to make it fall
 	
         jmp NextFrame
 
