@@ -1,0 +1,207 @@
+
+	processor 6502
+        include "vcs.h"
+        include "macro.h"
+        include "xmacro.h"
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Start an unitialized segment at $80 for variable declaration
+; We've memory from $80 to $FF to work with, minus a few at the
+; end if we use the Stack
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	seg.u Variables
+        org $80
+
+P0PosY ds 1 ; Defines 1 byte for Player0 sprite Vertical Position
+P0PosX ds 1 ; Defines 1 byte for Player0 sprite Horizontal Position
+
+P0Height equ #11
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Init Catridge
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	seg Code
+        org $f000
+        
+Start:
+	sei ; Clear interrupts
+        cld ; Clear Decimal Binary Code Math
+        ldx $ff ; Set Stack Pointer to last Mem position
+        txs ; Transfer X to Stack Pointer
+        
+        ldx #$ff
+        lda #0
+ZeroMemLoop:
+	sta $00,x
+        dex
+        bne ZeroMemLoop
+        sta $00
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Initial setup of Background and Players
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #$02
+        stx COLUBK ; Set Background color
+
+	lda #75
+        sta P0PosX ; Set Player0 initial Horizontal Position
+	
+        lda #91
+        sta P0PosY
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Start New Frame by configuring VBlank and VSync
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+NextFrame:
+	lda #2
+        sta VSYNC ; Turn on Vertical Synchronization
+        sta VBLANK ; Turn on Vertical Blank
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 3 empty Scanlines for VSYNC
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        sta WSYNC ; Wait (Horizontal Blank) Synchronization
+        sta WSYNC
+        sta WSYNC
+        
+        lda #0
+        sta VSYNC ; turn off VSYNC
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set Players Horizontal Position while in VBLank
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	lda P0PosX ; Load A with desired horizontal Position
+        and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
+        ; So the value in (A) will always be positive (like Abs)
+        
+        sta WSYNC ; Wait next scanline
+        sta HMCLR ; Clear old Horizontal Movement/Position values
+        
+        sec ; Set Carry flag before subtracting
+XDivisionLoop:
+	sbc #15 ; Subtract 15 from A
+        bcs XDivisionLoop ; Loop while carry is still set (A >= 15)
+        ; Meaning we can't subtract by 15 anymore (A < 15)
+	; (A) will contain the division remainder minus 15 at the end
+        
+        ; Adjust the range of the division remainder from -8 to 7
+        eor #%00000111 ; same as #7 decimal
+        asl ; Shift left A by 4, HMP0 uses only the left 4bits
+        asl 
+        asl 
+        asl 
+	sta HMP0 ; Set fine position
+        sta RESP0 ; Set the player at the 15-step rough position
+        sta WSYNC ; Wait next Scanline
+        sta HMOVE ; Apply fine position offset
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 37 empty Scanlines for VBLANK
+; But this time just 35 because the Horizontal Positioning
+; took 2 already
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #35
+VBlankLoop:
+	sta WSYNC
+        dex
+        bne VBlankLoop
+
+	ldx #0
+	stx VBLANK ; turn off VBLANK
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Here starts the 192 visible Scanlines
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #192 ; X will hold the remaining Scanlines
+Scanline:
+	txa ; transfer X to A
+        sec ; Set Carry flag before subtracting
+        sbc P0PosY ; Subtract P0 sprite Y coordinate - A
+        cmp P0Height ; Are we inside the sprite height bounds?
+        bcc DrawPlayer0 ; If result < SpriteHeight, draw player
+        lda #0 ; Else, set index to 0, turning off P0 graphics
+	
+DrawPlayer0:
+	tay
+        lda PlayerGraphics,Y ; Loop the PlayerGraphics table
+        sta GRP0 ; Set the graphics of P0 for this Scanline
+        lda PlayerColors,Y ; Loop the PlayerColors table
+        sta COLUP0 ; Set the P0 color for this Scanline
+        sta WSYNC ; Wait for Horizontal Synchronization (next Scanline)
+        dex
+        bne Scanline
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 30 empty Scanlines for Overscan
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #30
+        lda #2
+        sta VBLANK ; Turn on VBLANK
+OverscanLoop:
+	sta WSYNC
+        dex
+        bne OverscanLoop
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Move P0 horizontally to the left (clamped between 50 and 75)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        lda P0PosX ; Load A with the acutal P0 Horizontal Pos
+        cmp #50 ; Compare A with decimal #50
+        bmi ResetP0PosX ; If A < 50 reset P0's X position
+	jmp DecrementP0PosX ; Else, keep moving left
+        
+ResetP0PosX:
+	lda #75
+        sta P0PosX
+DecrementP0PosX:
+	; Decrement P0 X position each frame to make it move left
+	dec P0PosX
+        
+        ; Decrement P0 Y position each frame to make it move down
+        dec P0PosY
+        
+        jmp NextFrame
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Array of bytes to draw the Player graphics
+; These bytes are added in the final ROM addresses (from $FFE6-$FFF0)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	org $ffe6
+PlayerGraphics:
+	.byte #%00000000 ;  	
+	.byte #%11100111 ; ###  ###	
+        .byte #%01100110 ;  ##  ## 	
+        .byte #%01100110 ;  ##  ## 	
+        .byte #%11111111 ; ########	
+        .byte #%11111111 ; ########	
+        .byte #%11111111 ; ########	
+        .byte #%10011001 ; #  ##  #	
+        .byte #%10011001 ; #  ##  #	
+        .byte #%11111111 ; ########	
+        .byte #%01111110 ;  ######		
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Array of bytes to hold the Player colors
+; These bytes are added in the final ROM addresses (from $FFF1-$FFFB)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	org $fff1
+PlayerColors:
+	.byte #$00 	 ;
+	.byte #$44 	 ; ###  ###
+        .byte #$ac 	 ;  ##  ## 	
+        .byte #$ac 	 ;  ##  ##
+        .byte #$ac 	 ; ########
+        .byte #$44 	 ; ########	
+        .byte #$44 	 ; ########	
+        .byte #$2e 	 ; #  ##  #	
+        .byte #$2e 	 ; #  ##  #
+        .byte #$2e 	 ; ########
+        .byte #$2e 	 ;  ######
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Close Catridge
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+	org $fffc
+        .word Start	; reset vector
+        .word Start	; BRK vector
