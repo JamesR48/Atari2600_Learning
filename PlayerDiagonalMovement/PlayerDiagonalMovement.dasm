@@ -90,8 +90,8 @@ XDivisionLoop:
         asl 
         asl 
         asl 
+	sta RESP0 ; Set the player at the 15-step rough position
 	sta HMP0 ; Set fine position
-        sta RESP0 ; Set the player at the 15-step rough position
         sta WSYNC ; Wait next Scanline
         sta HMOVE ; Apply fine position offset
         
