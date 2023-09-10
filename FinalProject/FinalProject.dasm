@@ -15,8 +15,6 @@
 P0PosY ds 1 ; Defines 1 byte for Player0 sprite Vertical Position
 P0PosX ds 1 ; Defines 1 byte for Player0 sprite Horizontal Position
 
-P0Height equ #11
-
 BGColor ds 1
 PFColor ds 1
 
@@ -24,6 +22,11 @@ PFColor ds 1
 ; memory addresses are stored in 2 bytes
 FighterSpritePtr word ; Pointer to P0 sprite Lookup table
 FighterColorPtr word ; Pointer to P0 colors Lookup table
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Define Constants
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PO_HEIGHT equ #11
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Init Catridge
@@ -119,7 +122,7 @@ Scanline:
 	txa ; transfer X to A
         sec ; Set Carry flag before subtracting
         sbc P0PosY ; Subtract P0 sprite Y coordinate - A
-        cmp P0Height ; Are we inside the sprite height bounds?
+        cmp PO_HEIGHT ; Are we inside the sprite height bounds?
         bcc DrawPlayer0 ; If result < SpriteHeight, draw player
         lda #0 ; Else, set index to 0, turning off P0 graphics
 	
@@ -269,6 +272,11 @@ PlayerGraphics:
         .byte #%10011001 ; #  ##  #	
         .byte #%11111111 ; ########	
         .byte #%01111110 ;  ######		
+        
+; https://alienbill.com/2600/playerpalnext.html
+; Dynamically calculating Sprite's height
+; "." means "Current line"
+PO_HEIGHT = . - PlayerGraphics
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Array of bytes to hold the Player colors
