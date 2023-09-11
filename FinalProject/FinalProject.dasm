@@ -12,21 +12,29 @@
 	seg.u Variables
         org $80
 
-P0PosY ds 1 ; Defines 1 byte for Player0 sprite Vertical Position
-P0PosX ds 1 ; Defines 1 byte for Player0 sprite Horizontal Position
-
 BGColor ds 1
 PFColor ds 1
 
+P0PosY ds 1 ; Defines 1 byte for Player0 sprite Vertical Position
+P0PosX ds 1 ; Defines 1 byte for Player0 sprite Horizontal Position
+
+DemonPosY ds 1 ; Defines 1 byte for Player0 sprite Vertical Position
+DemonPosX ds 1 ; Defines 1 byte for Player0 sprite Horizontal Position
+
 ; words are 2 bytes long
 ; memory addresses are stored in 2 bytes
-FighterSpritePtr word ; Pointer to P0 sprite Lookup table
-FighterColorPtr word ; Pointer to P0 colors Lookup table
+PlayerSpritePtr word ; Pointer to P0 sprite Lookup table
+PlayerColorPtr word ; Pointer to P0 colors Lookup table
+PlayerAnimOffset byte ; P0 sprite frame offset (for animations!)
+
+DemonSpritePtr word ; Pointer to P0 sprite Lookup table
+DemonColorPtr word ; Pointer to P0 colors Lookup table
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Define Constants
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-PO_HEIGHT equ #11
+PO_HEIGHT equ #9
+DEMON_HEIGHT equ #17
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Init Catridge
@@ -45,27 +53,39 @@ Start:
 	tax
         stx BGColor
 
-	lda #80
-        sta P0PosX ; Set P0 initial Horizontal Position
-	
-        lda #91
-        sta P0PosY ; Set P0 initial Vertical Position
-        
-        lda #<PlayerGraphics
-        sta FighterSpritePtr ; lo-byte pointer for sprite lookuptable
-        lda #>PlayerGraphics
-        sta FighterSpritePtr+1 ; hi-byte pointer for sprite lookuptable
-        
-        lda #<PlayerColors
-        sta FighterColorPtr ; lo-byte pointer for color lookuptable
-        lda #>PlayerColors
-        sta FighterColorPtr+1 ; hi-byte pointer for color lookuptable
-        
-        ldy #$35
+	ldy #$35
         sty PFColor
         ; Set Control Playfield register to allow reflection        
         lda #%00000001 ; CTRLPF Register (D0 means reflect)
         sta CTRLPF
+
+	lda #80
+        sta P0PosX ; Set P0 initial Horizontal Position
+        lda #18
+        sta P0PosY ; Set P0 initial Vertical Position
+        lda #<PlayerFront
+        sta PlayerSpritePtr ; lo-byte pointer for sprite lookuptable
+        lda #>PlayerFront
+        sta PlayerSpritePtr+1 ; hi-byte pointer for sprite lookuptable
+        lda #<PlayerColors
+        sta PlayerColorPtr ; lo-byte pointer for color lookuptable
+        lda #>PlayerColors
+        sta PlayerColorPtr+1 ; hi-byte pointer for color lookuptable
+        
+        lda #20
+        sta DemonPosX ; Set P0 initial Horizontal Position
+        lda #68
+        sta DemonPosY ; Set P0 initial Vertical Position
+        lda #<DemonGraphics
+        sta DemonSpritePtr ; lo-byte pointer for sprite lookuptable
+        lda #>DemonGraphics
+        sta DemonSpritePtr+1 ; hi-byte pointer for sprite lookuptable
+        lda #<DemonColors
+        sta DemonColorPtr ; lo-byte pointer for color lookuptable
+        lda #>DemonColors
+        sta DemonColorPtr+1 ; hi-byte pointer for color lookuptable
+        lda #%00000101 ; Double size Player 1
+        sta NUSIZ1
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Start New Frame by configuring VBlank and VSync
@@ -92,8 +112,12 @@ NextFrame:
 	lda P0PosX ; Load A with desired horizontal Position
         and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
         ; So the value in (A) will always be positive (like Abs)
-        
         ldy #0 ; Y assigned to Player 0
+        jsr SetObjectPosX ; Jump to subroutine
+        
+        lda DemonPosX ; Load A with desired horizontal Position
+        and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
+        ldy #1 ; Y assigned to Player 1
         jsr SetObjectPosX ; Jump to subroutine
         
         sta WSYNC ; Wait next Scanline
@@ -114,33 +138,61 @@ VBlankLoop:
 	stx VBLANK ; turn off VBLANK
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Here starts the 192 visible Scanlines
+; Here starts the 96 visible Scanlines (because of 2-line drawing)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+DrawPlayfield:
+	ldy PFColor
+        sty COLUPF ; Set Playfield color
+        ldy #%01110000
+        sty PF0 ; Draw PlayField0 pattern
         
-        ldx #192 ; X will hold the remaining Scanlines
-Scanline:
+
+        ldx #96 ; X will hold the remaining Scanlines
+GameScanlineLoop:
+
+.IsPlayer0InScreen:
 	txa ; transfer X to A
         sec ; Set Carry flag before subtracting
         sbc P0PosY ; Subtract P0 sprite Y coordinate - A
         cmp PO_HEIGHT ; Are we inside the sprite height bounds?
-        bcc DrawPlayer0 ; If result < SpriteHeight, draw player
+        bcc .DrawPlayer0 ; If result < SpriteHeight, draw player
         lda #0 ; Else, set index to 0, turning off P0 graphics
-	
-DrawPlayer0:
+.DrawPlayer0:
+	clc ; Clear Carry flag before Adding
+	adc PlayerAnimOffset ; Jump to correct sprite frame address in memory
 	tay
-        lda PlayerGraphics,Y ; Loop the PlayerGraphics table
+        lda (PlayerSpritePtr),Y ; Loop the PlayerGraphics table
+        sta WSYNC ; Wait for Horizontal Synchronization (next Scanline)
         sta GRP0 ; Set the graphics of P0 for this Scanline
-        lda PlayerColors,Y ; Loop the PlayerColors table
+        lda (PlayerColorPtr),Y ; Loop the PlayerColors table
         sta COLUP0 ; Set the P0 color for this Scanline
         
-        ldy PFColor
-        sty COLUPF ; Set Playfield color
-        ldy #%01110000
-        sty PF0
+.IsDemonInScreen:
+	txa ; transfer X to A
+        sec ; Set Carry flag before subtracting
+        sbc DemonPosY ; Subtract P0 sprite Y coordinate - A
+        cmp DEMON_HEIGHT ; Are we inside the sprite height bounds?
+        bcc .DrawDemon ; If result < SpriteHeight, draw player
+        lda #0 ; Else, set index to 0, turning off P0 graphics
+.DrawDemon:
+	tay
+        lda (DemonSpritePtr),Y ; Loop the PlayerGraphics table
+        sta WSYNC ; Wait for Horizontal Synchronization (next Scanline)
+        sta GRP1 ; Set the graphics of P1 for this Scanline
+        lda (DemonColorPtr),Y ; Loop the PlayerColors table
+        sta COLUP1 ; Set the P1 color for this Scanline
+        
+        dex
+        bne GameScanlineLoop
         
         sta WSYNC ; Wait for Horizontal Synchronization (next Scanline)
-        dex
-        bne Scanline
+        ; Reset values each frame
+        lda #$02
+        sta COLUBK ; Reset BG Color to grey
+        lda #0
+        sta PlayerAnimOffset ; Reset P0 Anim frames
+        lda #%00000000
+        sta REFP0 ; Set P0 to not reflect
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Set 30 empty Scanlines for Overscan
@@ -182,12 +234,18 @@ CheckP0Left:
         bit SWCHA
         bne CheckP0Right
         dec P0PosX
+        lda PO_HEIGHT
+        sta PlayerAnimOffset
 
 CheckP0Right:
 	lda #%10000000
         bit SWCHA
         bne CheckP0Button
         inc P0PosX
+        lda PO_HEIGHT
+        sta PlayerAnimOffset
+        lda #%00001000
+        sta REFP0
         
 CheckP0Button:
 	lda #%10000000
@@ -196,11 +254,8 @@ CheckP0Button:
         inc BGColor
         lda BGColor
         sta COLUBK
-        jmp NextFrame
         
 NoInputPressed:
-	lda #$02
-        sta COLUBK ; Reset BG Color to grey
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Move P0 horizontally to the left (clamped between 50 and 75)
@@ -254,47 +309,113 @@ DivisionLoop:
         ; Return subroutine
         ; returns Program Counter to the point where this was called
         rts 
-        
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Demon Graphics
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+DemonGraphics:
+	.byte #%00000000;
+        .byte #%11000011;$34
+        .byte #%11000011;$34
+        .byte #%11100111;$00
+        .byte #%01111110;$00
+        .byte #%00111100;$34
+        .byte #%11111111;$34
+        .byte #%11111111;$34
+        .byte #%11111111;$34
+        .byte #%11111111;$34
+        .byte #%11111111;$34
+        .byte #%11111111;$34
+        .byte #%01100110;$34
+        .byte #%01111110;$34
+        .byte #%11111111;$34
+        .byte #%10000001;$34
+        .byte #%10000001;$34
+
+DEMON_HEIGHT = . - DemonGraphics
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Demon Color
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+DemonColors:
+	.byte #%00000000;
+        .byte #$34;
+        .byte #$34;
+        .byte #$00;
+        .byte #$00;
+        .byte #$09;
+        .byte #$34;
+        .byte #$34;
+        .byte #$34;
+        .byte #$34;
+        .byte #$34;
+        .byte #$34;
+        .byte #$34;
+        .byte #$34;
+        .byte #$34;
+        .byte #$34;
+        .byte #$34;
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Array of bytes to draw the Player graphics
 ; These bytes are added in the final ROM addresses (from $FFE6-$FFF0)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	org $ffe6
-PlayerGraphics:
+	;org $ffe6
+PlayerFront:
 	.byte #%00000000 ; zero padding, also clears register 	
-	.byte #%11100111 ; ###  ###	
-        .byte #%01100110 ;  ##  ## 	
-        .byte #%01100110 ;  ##  ## 	
-        .byte #%11111111 ; ########	
-        .byte #%11111111 ; ########	
-        .byte #%11111111 ; ########	
-        .byte #%10011001 ; #  ##  #	
-        .byte #%10011001 ; #  ##  #	
-        .byte #%11111111 ; ########	
-        .byte #%01111110 ;  ######		
+	.byte #%11100111;$F6
+        .byte #%01100110;$0C
+        .byte #%01111110;$10
+        .byte #%01111110;$F6
+        .byte #%01011010;$F6
+        .byte #%01111110;$0C
+        .byte #%11111111;$00
+        .byte #%11111111;$00		
         
 ; https://alienbill.com/2600/playerpalnext.html
 ; Dynamically calculating Sprite's height
 ; "." means "Current line"
-PO_HEIGHT = . - PlayerGraphics
+PO_HEIGHT = . - PlayerFront
+
+PlayerLeft:
+	.byte #%00000000 ; zero padding, also clears register 	
+	.byte #%11011100;$F6
+        .byte #%01101100;$0C
+        .byte #%11111100;$00
+        .byte #%11111100;$F6
+        .byte #%01011100;$F6
+        .byte #%11111111;$0C
+        .byte #%11111110;$00
+        .byte #%11111110;$00
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Array of bytes to hold the Player colors
 ; These bytes are added in the final ROM addresses (from $FFF1-$FFFB)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	org $fff1
+	;org $fff1
 PlayerColors:
 	.byte #$00 	 ;
-	.byte #$44 	 ; ###  ###
-        .byte #$ac 	 ;  ##  ## 	
-        .byte #$ac 	 ;  ##  ##
-        .byte #$ac 	 ; ########
-        .byte #$44 	 ; ########	
-        .byte #$44 	 ; ########	
-        .byte #$2e 	 ; #  ##  #	
-        .byte #$2e 	 ; #  ##  #
-        .byte #$2e 	 ; ########
-        .byte #$2e 	 ;  ######
+	.byte #$F6;
+        .byte #$0C;
+        .byte #$00;
+        .byte #$F6;
+        .byte #$F6;
+        .byte #$0C;
+        .byte #$00;
+        .byte #$00;
+        
+PlayerColors2:
+	.byte #$00 	 ;
+	.byte #$F6;
+        .byte #$0C;
+        .byte #$00;
+        .byte #$F6;
+        .byte #$F6;
+        .byte #$0C;
+        .byte #$00;
+        .byte #$00;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Close Catridge
