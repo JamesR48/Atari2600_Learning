@@ -27,8 +27,13 @@ PlayerSpritePtr word ; Pointer to P0 sprite Lookup table
 PlayerColorPtr word ; Pointer to P0 colors Lookup table
 PlayerAnimOffset byte ; P0 sprite frame offset (for animations!)
 
+PlayerIdle0 ds 1
+PlayerIdle1 ds 1
+
 DemonSpritePtr word ; Pointer to P0 sprite Lookup table
 DemonColorPtr word ; Pointer to P0 colors Lookup table
+
+Rand8 ds 1
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Define Constants
@@ -87,6 +92,8 @@ Start:
         lda #%00000101 ; Double size Player 1
         sta NUSIZ1
         
+        lda #%1001
+        sta Rand8
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Start New Frame by configuring VBlank and VSync
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -128,7 +135,7 @@ NextFrame:
 ; But this time just 35 because the Horizontal Positioning
 ; took 2 already
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	ldx #35
+	ldx #34
 VBlankLoop:
 	sta WSYNC
         dex
@@ -274,9 +281,39 @@ NoInputPressed:
         
         ; Decrement P0 Y position each frame to make it move down
         ;dec P0PosY
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Calculations to update position for next frame
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+UpdateDemonPosition:
+	lda DemonPosY
+        clc ; Clear carry before comparing
+        cmp #0 ; compare Demon Y-Position with 0
+        ; If position is < 0 (reached the bottom), reset it back to the top
+        bmi ResetDemonPosition
+        ;dec DemonPosY ; Else, make the Demon move down
+        jmp EndPositionUpdate
+ResetDemonPosition:
+	lda #96 ; Because of 2-line kernel, #96 is the screen top Scanline
+        sta DemonPosY
         
-        jmp NextFrame
-               
+        jsr RandomNumGenerator
+        and #97
+        clc
+        adc #20
+        
+        ;lda P0PosX
+        sta DemonPosX
+        
+; Fall back for the Position Update code        
+EndPositionUpdate:
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Jump to next frame
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	jmp NextFrame
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Subroutine to set the X position of objects with fine offset
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;               
@@ -309,6 +346,22 @@ DivisionLoop:
         ; Return subroutine
         ; returns Program Counter to the point where this was called
         rts 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Random number generator LFSR
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; https://www.randomterrain.com/atari-2600-lets-make-a-game-spiceware-10.html
+; https://www.youtube.com/watch?v=Ks1pw1X22y4
+RandomNumGenerator subroutine
+	lda Rand8
+        lsr
+        bcc NoEOR
+        eor #$B4
+NoEOR:
+	sta Rand8
+        
+        rts
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Demon Graphics
@@ -390,6 +443,17 @@ PlayerLeft:
         .byte #%11111110;$00
         .byte #%11111110;$00
 
+PlayerLeftWalk_01:
+	.byte #%00000000 ; zero padding, also clears register
+        .byte #%11000001;$F6
+        .byte #%01100111;$0C
+        .byte #%01111110;$00
+        .byte #%01111110;$F6
+        .byte #%00101110;$F6
+        .byte #%01111111;$0C
+        .byte #%11111111;$00
+        .byte #%11111111;$00
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Array of bytes to hold the Player colors
 ; These bytes are added in the final ROM addresses (from $FFF1-$FFFB)
@@ -417,6 +481,16 @@ PlayerColors2:
         .byte #$00;
         .byte #$00;
 
+PlayerColors3:
+	.byte #$00 
+        .byte #$F6;
+        .byte #$0C;
+        .byte #$00;
+        .byte #$F6;
+        .byte #$F6;
+        .byte #$0C;
+        .byte #$00;
+        .byte #$00;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Close Catridge
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
