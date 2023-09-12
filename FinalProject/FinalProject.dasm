@@ -193,6 +193,7 @@ GameScanlineLoop:
         dex
         bne GameScanlineLoop
         
+        sta WSYNC
         ; Reset values each frame
         lda #$02
         sta COLUBK ; Reset BG Color to grey
@@ -200,6 +201,17 @@ GameScanlineLoop:
         sta PlayerAnimOffset ; Reset P0 Anim frames
         lda #%00000000
         sta REFP0 ; Set P0 to not reflect
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 30 empty Scanlines for Overscan
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #30
+        lda #2
+        sta VBLANK ; Turn on VBLANK
+OverscanLoop:
+	sta WSYNC
+        dex
+        bne OverscanLoop
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Testing Joystick Input
@@ -254,17 +266,6 @@ CheckP0Button:
 NoInputPressed:
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Set 30 empty Scanlines for Overscan
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	ldx #30
-        lda #2
-        sta VBLANK ; Turn on VBLANK
-OverscanLoop:
-	sta WSYNC
-        dex
-        bne OverscanLoop
-        
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Move P0 horizontally to the left (clamped between 50 and 75)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
         ;lda P0PosX ; Load A with the acutal P0 Horizontal Pos
@@ -285,6 +286,7 @@ OverscanLoop:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Calculations to update position for next frame
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	sta WSYNC
 UpdateDemonPosition:
 	lda DemonPosY
         clc ; Clear carry before comparing
