@@ -122,6 +122,7 @@ NextFrame:
         ldy #0 ; Y assigned to Player 0
         jsr SetObjectPosX ; Jump to subroutine
         
+        sta WSYNC ; Wait next Scanline
         lda DemonPosX ; Load A with desired horizontal Position
         and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
         ldy #1 ; Y assigned to Player 1
@@ -135,7 +136,7 @@ NextFrame:
 ; But this time just 35 because the Horizontal Positioning
 ; took 2 already
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	ldx #34
+	ldx #33
 VBlankLoop:
 	sta WSYNC
         dex
@@ -192,7 +193,6 @@ GameScanlineLoop:
         dex
         bne GameScanlineLoop
         
-        sta WSYNC ; Wait for Horizontal Synchronization (next Scanline)
         ; Reset values each frame
         lda #$02
         sta COLUBK ; Reset BG Color to grey
@@ -200,17 +200,6 @@ GameScanlineLoop:
         sta PlayerAnimOffset ; Reset P0 Anim frames
         lda #%00000000
         sta REFP0 ; Set P0 to not reflect
-        
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Set 30 empty Scanlines for Overscan
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	ldx #30
-        lda #2
-        sta VBLANK ; Turn on VBLANK
-OverscanLoop:
-	sta WSYNC
-        dex
-        bne OverscanLoop
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Testing Joystick Input
@@ -263,6 +252,17 @@ CheckP0Button:
         sta COLUBK
         
 NoInputPressed:
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 30 empty Scanlines for Overscan
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #30
+        lda #2
+        sta VBLANK ; Turn on VBLANK
+OverscanLoop:
+	sta WSYNC
+        dex
+        bne OverscanLoop
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Move P0 horizontally to the left (clamped between 50 and 75)
