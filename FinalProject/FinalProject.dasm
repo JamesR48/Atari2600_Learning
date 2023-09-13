@@ -35,9 +35,6 @@ DemonColorPtr word ; Pointer to P0 colors Lookup table
 
 Rand8 ds 1
 
-PlayfieldDataPtr word ; Pointer to Playfield data Lookup table
-PlayfieldDataIndex byte ; Playfield data current index
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Define Constants
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -68,11 +65,6 @@ Start:
         ; Set Control Playfield register to allow reflection        
         lda #%00000001 ; CTRLPF Register (D0 means reflect)
         sta CTRLPF
-	
-        lda #<PlayFieldPattern
-        sta PlayfieldDataPtr
-        lda #>PlayFieldPattern
-        sta PlayfieldDataPtr+1
         
 	lda #80
         sta P0PosX ; Set P0 initial Horizontal Position
@@ -103,7 +95,7 @@ Start:
         sta NUSIZ1
         
         lda #%1001
-        sta Rand8
+        sta Rand8 ; initialize the Random Seed (8bits)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Start New Frame by configuring VBlank and VSync
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -163,19 +155,36 @@ VBlankLoop:
 	stx VBLANK ; turn off VBLANK
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Here starts the 96 visible Scanlines (because of 2-line drawing)
+; Display the Scoreboard scanlines
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;DrawPlayfield:
-	;ldy PFColor
-        ;sty COLUPF ; Set Playfield color
-        ;ldy #%01110000
-        ;sty PF0 ; Draw PlayField0 pattern
+	lda #0 ; clear TIA registers before each new frame
+	sta PF0
+        sta PF1
+        sta PF2
+        sta GRP0
+        sta GRP1
+        sta COLUPF
         
-        ldx #96 ; X will hold the remaining Scanlines
-GameScanlineLoop:
+        ; Display 20 scanline where the scoreboard goes
+        ldx #20
+ClearTIA:
+	sta WSYNC
+	dex
+        bne ClearTIA
 
-.DrawPlayfield:
-	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Here starts the 96 visible Scanlines (because of 2-line drawing)
+; But actually...84, because of the 20 empty scoreboard lines
+; (192 - scoreboardlines[20]) / 2 [2-line drawing] = 84
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+DrawPlayfield:
+	ldy PFColor
+        sty COLUPF ; Set Playfield color
+        ldy #%01110000
+        sty PF0 ; Draw PlayField0 pattern
+        
+        ldx #84 ; X will hold the remaining Scanlines
+GameScanlineLoop:
 
 .IsPlayer0InScreen:
 	txa ; transfer X to A
@@ -211,27 +220,6 @@ GameScanlineLoop:
         
         dex
         bne GameScanlineLoop
-        
-CheckCollisionP0PF:
-	lda #%10000000
-        bit CXP0FB
-        bne OnCollisionP0PF
-        
-CheckCollisionP0P1:
-	lda #%10000000
-        bit CXPPMM
-        bne OnCollisionP0P1
-        
-        jmp EndCollisionCheck
-        
-OnCollisionP0PF:
-	jmp Start
-        
-OnCollisionP0P1:
-	;dec P0PosY
-        
-EndCollisionCheck:
-	sta CXCLR
         
         sta WSYNC
         ; Reset values each frame
@@ -304,24 +292,6 @@ CheckP0Button:
         sta COLUBK
         
 NoInputPressed:
-        
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Move P0 horizontally to the left (clamped between 50 and 75)
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-        ;lda P0PosX ; Load A with the acutal P0 Horizontal Pos
-        ;cmp #50 ; Compare A with decimal #50
-        ;bmi ResetP0PosX ; If A < 50 reset P0's X position
-	;jmp DecrementP0PosX ; Else, keep moving left
-        
-;ResetP0PosX:
-	;lda #75
-        ;sta P0PosX
-;DecrementP0PosX:
-	; Decrement P0 X position each frame to make it move left
-	;dec P0PosX
-        
-        ; Decrement P0 Y position each frame to make it move down
-        ;dec P0PosY
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Calculations to update position for next frame
@@ -349,6 +319,35 @@ ResetDemonPosition:
         
 ; Fall back for the Position Update code        
 EndPositionUpdate:
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Check collisions before ending the frame
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+CheckCollisionP0PF:
+	; CXP0FB bit 7 detects P0-PF collisions, bit 6 P0-Ball collisions
+	lda #%10000000
+        bit CXP0FB
+        bne OnCollisionP0PF ;If collision, check response
+        
+CheckCollisionP0P1:
+	; CXPPMM bit 7 detects P0-P1 collisions, bit 6 Missile0-1 collisions
+	lda #%10000000
+        bit CXPPMM
+        bne OnCollisionP0P1
+        
+        jmp EndCollisionCheck ; End collision checking if none happened
+        
+OnCollisionP0PF:
+	jmp Start ; Restart the game when colliding with the PF
+        
+OnCollisionP0P1:
+	; jsr GameOver
+	;dec P0PosY
+        
+; Fall back for the collision checking        
+EndCollisionCheck:
+	sta CXCLR ; Always clear all collision flags before next frame
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -403,14 +402,19 @@ DivisionLoop:
 ; https://www.youtube.com/watch?v=Ks1pw1X22y4
 RandomNumGenerator subroutine
 	lda Rand8
-        lsr
+        lsr ; Logical Shift Right
         bcc NoEOR
         eor #$B4
 NoEOR:
 	sta Rand8
-        
         rts
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Game Over Subroutine
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GameOver subroutine
+	; Clear score and stuff
+	rts
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Demon Graphics
@@ -540,17 +544,7 @@ PlayerColors3:
         .byte #$0C;
         .byte #$00;
         .byte #$00;
-        
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; PlayField Data
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-PlayFieldPattern:
-	.byte  0,#%11110000,#%11111111,#%11111111
-	.byte  8,#%01110000,#%00000000,#%00000000
-	.byte  88,#%11110000,#%11111111,#%11111111
-	.byte 0
 
-        
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; This table converts the "remainder" of the division by 15 (-1 to -15) to the correct
 ; fine adjustment value. This table is on a page boundary to guarantee the processor
