@@ -35,6 +35,9 @@ DemonColorPtr word ; Pointer to P0 colors Lookup table
 
 Rand8 ds 1
 
+PlayfieldDataPtr word ; Pointer to Playfield data Lookup table
+PlayfieldDataIndex byte ; Playfield data current index
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Define Constants
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -65,7 +68,12 @@ Start:
         ; Set Control Playfield register to allow reflection        
         lda #%00000001 ; CTRLPF Register (D0 means reflect)
         sta CTRLPF
-
+	
+        lda #<PlayFieldPattern
+        sta PlayfieldDataPtr
+        lda #>PlayFieldPattern
+        sta PlayfieldDataPtr+1
+        
 	lda #80
         sta P0PosX ; Set P0 initial Horizontal Position
         lda #18
@@ -124,7 +132,7 @@ NextFrame:
         lda P0PosX ; Load A with desired horizontal Position
         and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
         clc
-        adc #14
+        adc #15
         ; So the value in (A) will always be positive (like Abs)
         ldy #0 ; Y assigned to Player 0
         jsr SetObjectPosX ; Jump to subroutine
@@ -157,15 +165,17 @@ VBlankLoop:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Here starts the 96 visible Scanlines (because of 2-line drawing)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-DrawPlayfield:
-	ldy PFColor
-        sty COLUPF ; Set Playfield color
-        ldy #%01110000
-        sty PF0 ; Draw PlayField0 pattern
+;DrawPlayfield:
+	;ldy PFColor
+        ;sty COLUPF ; Set Playfield color
+        ;ldy #%01110000
+        ;sty PF0 ; Draw PlayField0 pattern
         
-
         ldx #96 ; X will hold the remaining Scanlines
 GameScanlineLoop:
+
+.DrawPlayfield:
+	
 
 .IsPlayer0InScreen:
 	txa ; transfer X to A
@@ -202,6 +212,27 @@ GameScanlineLoop:
         dex
         bne GameScanlineLoop
         
+CheckCollisionP0PF:
+	lda #%10000000
+        bit CXP0FB
+        bne OnCollisionP0PF
+        
+CheckCollisionP0P1:
+	lda #%10000000
+        bit CXPPMM
+        bne OnCollisionP0P1
+        
+        jmp EndCollisionCheck
+        
+OnCollisionP0PF:
+	jmp Start
+        
+OnCollisionP0P1:
+	;dec P0PosY
+        
+EndCollisionCheck:
+	sta CXCLR
+        
         sta WSYNC
         ; Reset values each frame
         lda #$02
@@ -210,7 +241,7 @@ GameScanlineLoop:
         sta PlayerAnimOffset ; Reset P0 Anim frames
         lda #%00000000
         sta REFP0 ; Set P0 to not reflect
-        
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Set 30 empty Scanlines for Overscan
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -302,7 +333,7 @@ UpdateDemonPosition:
         cmp #0 ; compare Demon Y-Position with 0
         ; If position is < 0 (reached the bottom), reset it back to the top
         bmi ResetDemonPosition
-        ;dec DemonPosY ; Else, make the Demon move down
+        dec DemonPosY ; Else, make the Demon move down
         jmp EndPositionUpdate
 ResetDemonPosition:
 	lda #96 ; Because of 2-line kernel, #96 is the screen top Scanline
@@ -510,12 +541,22 @@ PlayerColors3:
         .byte #$00;
         .byte #$00;
         
-;---------------------------------------------------------------------------------------
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; PlayField Data
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PlayFieldPattern:
+	.byte  0,#%11110000,#%11111111,#%11111111
+	.byte  8,#%01110000,#%00000000,#%00000000
+	.byte  88,#%11110000,#%11111111,#%11111111
+	.byte 0
+
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; This table converts the "remainder" of the division by 15 (-1 to -15) to the correct
 ; fine adjustment value. This table is on a page boundary to guarantee the processor
 ; will cross a page boundary and waste a cycle in order to be at the precise position
 ; for a RESP0,x write
-;---------------------------------------------------------------------------------------
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 FineAdjustBegin:
             DC.B %01110000; Left 7 
             DC.B %01100000; Left 6
