@@ -12,8 +12,9 @@
 	seg.u Variables
         org $80
 
-BGColor ds 1
-PFColor ds 1
+BGColor ds 1 ; Background color byte
+PFColor ds 1 ; Playfield color byte
+ScoreColor ds 1 ; Score-Playfield color byte
 
 P0PosY ds 1 ; Defines 1 byte for Player0 sprite Vertical Position
 P0PosX ds 1 ; Defines 1 byte for Player0 sprite Horizontal Position
@@ -33,13 +34,25 @@ PlayerIdle1 ds 1
 DemonSpritePtr word ; Pointer to P0 sprite Lookup table
 DemonColorPtr word ; Pointer to P0 colors Lookup table
 
-Rand8 ds 1
+Rand8 ds 1 ; 8 bits seed value for the random generator
+
+Score ds 1 ; 2-digit score stored as BCD
+; It's important to declare the timer right after the Score
+; in contiguos memory locations
+Timer ds 1 ; 2-digit timer stored as BCD
+
+; These are words because they'll be handling score and timer together
+OnesDigitOffset word ; look-up table offset for the score 1's digit (0000 score 0000 timer)
+TensDigitOffset word ; look-up table offset for the score 10's digit (0000 score 0000 timer)
+
+TempVar ds 1 ; Auxiliary variable to store temporary data (like Score values)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Define Constants
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 PO_HEIGHT equ #9
 DEMON_HEIGHT equ #17
+DIGITS_HEIGHT equ #5 ; Scoreboard Digits height
 
 FineAdjustTable equ FineAdjustBegin - %11110001; NOTE: %11110001 = -15
 
@@ -56,15 +69,12 @@ Start:
 ; Initial setup of Background and Players
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	lda #$02
-        sta COLUBK ; Set Background color
-	tax
-        stx BGColor
-
+        sta COLUBK ; Set Background color to grey
+        sta BGColor
 	ldy #$35
-        sty PFColor
-        ; Set Control Playfield register to allow reflection        
-        lda #%00000001 ; CTRLPF Register (D0 means reflect)
-        sta CTRLPF
+        sty PFColor ; Set Playfield color to red
+        lda #$1c
+        sta ScoreColor ; Set Score-Playfield color to white
         
 	lda #80
         sta P0PosX ; Set P0 initial Horizontal Position
@@ -96,6 +106,11 @@ Start:
         
         lda #%1001
         sta Rand8 ; initialize the Random Seed (8bits)
+        
+        lda #0
+        sta Score
+        sta Timer
+        
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Start New Frame by configuring VBlank and VSync
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -119,7 +134,7 @@ NextFrame:
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Set Players Horizontal Position while in VBLank
-; Using subroutine!
+; Also calculate current Scoreboard drawing offset
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
         lda P0PosX ; Load A with desired horizontal Position
         and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
@@ -136,6 +151,9 @@ NextFrame:
         adc #14
         ldy #1 ; Y assigned to Player 1
         jsr SetObjectPosX ; Jump to subroutine
+        
+; Calculate Scoreboard Digits look-up table offset
+        jsr CalculateDigitOffset
         
         sta WSYNC ; Wait next Scanline
         sta HMOVE ; Apply fine position offset
@@ -163,7 +181,12 @@ VBlankLoop:
         sta PF2
         sta GRP0
         sta GRP1
+        
+        lda ScoreColor
         sta COLUPF
+        ; Set Control Playfield register to disable reflection (for Score)        
+        lda #%00000000 ; CTRLPF Register (D0 = 0 means don't reflect)
+        sta CTRLPF
         
         ; Display 20 scanline where the scoreboard goes
         ldx #20
@@ -178,6 +201,9 @@ ClearTIA:
 ; (192 - scoreboardlines[20]) / 2 [2-line drawing] = 84
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 DrawPlayfield:
+	; CTRLPF Register (D0 = 1 means reflect)
+	lda #%00000001 
+        sta CTRLPF
 	ldy PFColor
         sty COLUPF ; Set Playfield color
         ldy #%01110000
@@ -417,6 +443,56 @@ GameOver subroutine
 	rts
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; subroutine to handle Scoreboard digits to be displayed
+; Convert High and Low nibbles of the variable Score and Timer
+; into the offsets of digits look-up table for display.
+; Each digit has a height of 5bytes in the table
+
+; For the Low nibble, multiply by 5 (height)
+; - We can use left shifts to multiply by 2
+; - For any number n (in the digits), value of n*5 = (n*2*2)+n = n ASL ASL + n
+
+; For the High nibble, since its already times 16, we need to divide by 16 and multiply by 5 (height)
+; - We can use right shifts to divide by 2
+; - For any number n (in the digits), value of (n/16)*5 = (n/2/2) + (n/2/2/2/2)
+; Because (n/16)*5 = (n/4)+(n/16) = (16n + 4n)/64 = (20n)/64 = (10n)/32 = (5n)/16
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+CalculateDigitOffset subroutine
+	; loop that will run twice, one for handling score, the other for time
+        ldx 1 ; Loop counter
+.PrepareScore: ; loop twice, 1st with X = 1, 2nd with x = 0
+	; Store in A, the value in Score's variable memory position + X
+        ; Score + X -> Score + 1 -> Timer's variable memory position!
+        ; Score + X -> Score + 0 -> Score's variable memory position!
+        lda Score,X 
+        ; Force 1st 4bits to be 0, removing the tens from the Digit!
+        and #%00001111 ; same as #$0F
+        sta TempVar ; Save the result in the Temp variable
+        
+        ; Calculate Low nibble (one's digit), n*5 = (n*2*2)+n
+        asl ; Arithmetic Shift Left (n*2)
+        asl ; Arithmetic Shift Left (n*4)
+        adc TempVar ; (n*4)+n
+        sta OnesDigitOffset,X ; Save A One's offset in timer when x=0, in score when x=1
+        
+        ; Calculate High nibble (ten's digit), (n/16)*5 = (n/2/2)+(n/2/2/2/2)
+        lda Score,X ; Load A with Timer when X=1, and Score when X=0
+        ; Force 2nd 4bits to be 0, removing the ones from the Digit!
+        and #%11110000 ; same as #$F0
+        lsr ; Logical Shift Right (n/2)
+        lsr ; Logical Shift Right (n/4)
+        sta TempVar ; Save (n/4) in TempVar
+        ; Know A = (n/4), keep shifting until (n/16)
+        lsr ; Logical Shift Right (n/8)
+        lsr ; Logical Shift Right (n/16)
+        adc TempVar ; (n/16) + (n/4)
+        sta TensDigitOffset,X ; Save A Ten's offset in timer when x=0, in score when x=1
+        
+        dex
+        bpl .PrepareScore ; While X > 0, loop again
+        rts
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Demon Graphics
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -544,6 +620,108 @@ PlayerColors3:
         .byte #$0C;
         .byte #$00;
         .byte #$00;
+
+;===============================================================================
+; Digit Graphics
+;===============================================================================
+        align 256
+Digits:
+      .byte %01110111          ; ### ###
+      .byte %01010101          ; # # # #
+      .byte %01010101          ; # # # #
+      .byte %01010101          ; # # # #
+      .byte %01110111          ; ### ###
+DIGITS_HEIGHT = . - Digits
+
+      .byte %00010001          ;   #   #
+      .byte %00010001          ;   #   #
+      .byte %00010001          ;   #   #
+      .byte %00010001          ;   #   #
+      .byte %00010001          ;   #   #
+
+      .byte %01110111          ; ### ###
+      .byte %00010001          ;   #   #
+      .byte %01110111          ; ### ###
+      .byte %01000100          ; #   #
+      .byte %01110111          ; ### ###
+
+      .byte %01110111          ; ### ###
+      .byte %00010001          ;   #   #
+      .byte %00110011          ;  ##  ##
+      .byte %00010001          ;   #   #
+      .byte %01110111          ; ### ###
+
+      .byte %01010101          ; # # # #
+      .byte %01010101          ; # # # #
+      .byte %01110111          ; ### ###
+      .byte %00010001          ;   #   #
+      .byte %00010001          ;   #   #
+
+      .byte %01110111          ; ### ###
+      .byte %01000100          ; #   #
+      .byte %01110111          ; ### ###
+      .byte %00010001          ;   #   #
+      .byte %01110111          ; ### ###
+
+      .byte %01110111          ; ### ###
+      .byte %01000100          ; #   #
+      .byte %01110111          ; ### ###
+      .byte %01010101          ; # # # #
+      .byte %01110111          ; ### ###
+
+      .byte %01110111          ; ### ###
+      .byte %00010001          ;   #   #
+      .byte %00010001          ;   #   #
+      .byte %00010001          ;   #   #
+      .byte %00010001          ;   #   #
+
+      .byte %01110111          ; ### ###
+      .byte %01010101          ; # # # #
+      .byte %01110111          ; ### ###
+      .byte %01010101          ; # # # #
+      .byte %01110111          ; ### ###
+
+      .byte %01110111          ; ### ###
+      .byte %01010101          ; # # # #
+      .byte %01110111          ; ### ###
+      .byte %00010001          ;   #   #
+      .byte %01110111          ; ### ###
+
+      .byte %00100010          ;  #   #
+      .byte %01010101          ; # # # #
+      .byte %01110111          ; ### ###
+      .byte %01010101          ; # # # #
+      .byte %01010101          ; # # # #
+
+      .byte %01110111          ; ### ###
+      .byte %01010101          ; # # # #
+      .byte %01100110          ; ##  ##
+      .byte %01010101          ; # # # #
+      .byte %01110111          ; ### ###
+
+      .byte %01110111          ; ### ###
+      .byte %01000100          ; #   #
+      .byte %01000100          ; #   #
+      .byte %01000100          ; #   #
+      .byte %01110111          ; ### ###
+
+      .byte %01100110          ; ##  ##
+      .byte %01010101          ; # # # #
+      .byte %01010101          ; # # # #
+      .byte %01010101          ; # # # #
+      .byte %01100110          ; ##  ##
+
+      .byte %01110111          ; ### ###
+      .byte %01000100          ; #   #
+      .byte %01110111          ; ### ###
+      .byte %01000100          ; #   #
+      .byte %01110111          ; ### ###
+
+      .byte %01110111          ; ### ###
+      .byte %01000100          ; #   #
+      .byte %01100110          ; ##  ##
+      .byte %01000100          ; #   #
+      .byte %01000100          ; #   #
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; This table converts the "remainder" of the division by 15 (-1 to -15) to the correct
