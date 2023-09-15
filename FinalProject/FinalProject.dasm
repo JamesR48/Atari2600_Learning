@@ -71,10 +71,11 @@ Start:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Initial setup of Background and Players
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	lda #$02
-        sta COLUBK ; Set Background color to grey
+        lda #$02
+        ; Set Background color to grey
         sta BGColor
-	ldy #$35
+        
+        ldy #$35
         sty PFColor ; Set Playfield color to red
         lda #$1c
         sta ScoreColor ; Set Score-Playfield color to white
@@ -120,7 +121,10 @@ Start:
 NextFrame:
 	lsr SWCHB	; test Game Reset switch
         bcc Start	; reset?
-
+	
+        lda BGColor
+        sta COLUBK
+        
 	lda #2
         sta WSYNC
         sta VSYNC ; Turn on Vertical Synchronization
@@ -163,6 +167,7 @@ VBlankLoop:
         ;and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
         ;clc
         ;adc #14
+        
         ldy #1 ; Y assigned to Player 1
         jsr SetObjectPosX ; Jump to subroutine
         
@@ -176,9 +181,11 @@ VBlankLoop:
 	ldx #0
         sta WSYNC ; Wait next Scanline
 	stx VBLANK 
-
+	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Display the Scoreboard scanlines
+; The Score/Timer digits will be drawn using 2 scanlines
+; so they'll be stretched vertically (for readability)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	; clear TIA registers before each new frame
         lda #0 
@@ -187,20 +194,21 @@ VBlankLoop:
         sta PF2
         sta GRP0
         sta GRP1
+        sta COLUBK
+        ; Set Control Playfield register to disable reflection (for Score)        
+        ; CTRLPF Register (D0 = 0 means don't reflect)
+        sta CTRLPF
         
         lda ScoreColor
         sta COLUPF
-        ; Set Control Playfield register to disable reflection (for Score)        
-        lda #%00000000 ; CTRLPF Register (D0 = 0 means don't reflect)
-        sta CTRLPF
         
-        ; Display 20 scanline where the scoreboard goes
-        ldx #20
-ClearTIA:
+; Display 5 empty scanlines above where the scoreboard goes
+        ldx #5
+PrevScoreSpace:
 	sta WSYNC
 	dex
-        bne ClearTIA
-
+        bne PrevScoreSpace
+	
 	; Start drawing the score
 	ldx #DIGITS_HEIGHT
 ScoreDigitsLoop:
@@ -233,16 +241,47 @@ ScoreDigitsLoop:
         ora TimerSprite ; Merge the Timer Tens and Ones graphics
         sta TimerSprite ; Save the Timer full graphics (Tens and Ones) ;31
         
+        ; Waste some cycles to wait for the beam to go a little bit
+        ; to the right and display the Timer graphics in the correct
+        ; desired position (right side of the screen)
+        jsr Sleep12Cycles
+        
+        sta PF1 ; Display the Timer graphics using PF1
+        
+        ldy ScoreSprite ; Preload for the next Scanline
+        sta WSYNC ; Wait for next Scanline
+        
+        sty PF1 ; Display the Score graphics using PF1
+        inc TensDigitOffset ; Move to the next Score Tens Digit offset
+        inc TensDigitOffset+1 ; Move to the next Timer Tens Digit offset
+        inc OnesDigitOffset ; Move to the next Score Ones Digit offset
+        inc OnesDigitOffset+1 ; Move to the next Timer Ones Digit offset
+        
+        jsr Sleep12Cycles
+        
 	dex
+        sta PF1 ; Display the Timer graphics using PF1
         bne ScoreDigitsLoop
+	sta WSYNC ; Wait for next Scanline
+        
+        stx PF1 ; Turn off score drawing
+        sta WSYNC ; Wait for next Scanline
+        
+; Display 5 empty scanlines below where the scoreboard goes
+        ldx #5
+PostScoreSpace:
 	sta WSYNC
-        stx PF1
+	dex
+        bne PostScoreSpace
+        
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Here starts the 96 visible Scanlines (because of 2-line drawing)
-; But actually...84, because of the 20 empty scoreboard lines
-; (192 - scoreboardlines[20]) / 2 [2-line drawing] = 84
+; But actually...91, because of the 10 empty scoreboard lines
+; (192 - scoreboardlines[10]) / 2 [2-line drawing] = 91
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 DrawPlayfield:
+        lda #02
+        sta COLUBK
 	; CTRLPF Register (D0 = 1 means reflect)
 	lda #%00000001 
         sta CTRLPF
@@ -251,7 +290,7 @@ DrawPlayfield:
         ldy #%01110000
         sty PF0 ; Draw PlayField0 pattern
         
-        ldx #84 ; X will hold the remaining Scanlines
+        ldx #91 ; X will hold the remaining Scanlines
 GameScanlineLoop:
 
 .IsPlayer0InScreen:
@@ -360,7 +399,7 @@ CheckP0Button:
         sta COLUBK
         
 NoInputPressed:
-
+        
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Calculations to update position for next frame
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -391,7 +430,7 @@ EndPositionUpdate:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Check collisions before ending the frame
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+	
 CheckCollisionP0PF:
 	; CXP0FB bit 7 detects P0-PF collisions, bit 6 P0-Ball collisions
 	lda #%10000000
@@ -533,6 +572,14 @@ CalculateDigitOffset subroutine
         dex
         bpl .PrepareScore ; While X > 0, loop again
         rts
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Sleep/Waste 12 CPU Cycles routine
+; jsr takes 6 cycles
+; rts takes another 6 cycles
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Sleep12Cycles subroutine
+	rts
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Demon Graphics
