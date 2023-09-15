@@ -36,14 +36,17 @@ DemonColorPtr word ; Pointer to P0 colors Lookup table
 
 Rand8 ds 1 ; 8 bits seed value for the random generator
 
-Score ds 1 ; 2-digit score stored as BCD
+Score ds 1 ; 2-digit score stored as BCD (Binary Coded Decimal)
 ; It's important to declare the timer right after the Score
 ; in contiguos memory locations
-Timer ds 1 ; 2-digit timer stored as BCD
+Timer ds 1 ; 2-digit timer stored as BCD (Binary Coded Decimal)
 
 ; These are words because they'll be handling score and timer together
 OnesDigitOffset word ; look-up table offset for the score 1's digit (0000 score 0000 timer)
 TensDigitOffset word ; look-up table offset for the score 10's digit (0000 score 0000 timer)
+
+ScoreSprite ds 1 ; Current found Score Digit Graphic to display
+TimerSprite ds 1 ; Current found Timer Digit Graphic to display
 
 TempVar ds 1 ; Auxiliary variable to store temporary data (like Score values)
 
@@ -133,22 +136,33 @@ NextFrame:
         sta VSYNC ; turn off VSYNC
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set 37 empty Scanlines for VBLANK
+; But this time just 31 because the Horizontal Positioning
+; and other calculation took 6 already
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ldx #31
+VBlankLoop:
+	sta WSYNC
+        dex
+        bne VBlankLoop
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Set Players Horizontal Position while in VBLank
 ; Also calculate current Scoreboard drawing offset
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
         lda P0PosX ; Load A with desired horizontal Position
-        and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
-        clc
-        adc #15
+        ;and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
+        ;clc
+        ;adc #15
         ; So the value in (A) will always be positive (like Abs)
         ldy #0 ; Y assigned to Player 0
         jsr SetObjectPosX ; Jump to subroutine
         
-        sta WSYNC ; Wait next Scanline
+        ;sta WSYNC ; Wait next Scanline
         lda DemonPosX ; Load A with desired horizontal Position
-        and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
-        clc
-        adc #14
+        ;and #%01111111 ; (bitwise AND) Forces bit 7 to 0 (#$7F)
+        ;clc
+        ;adc #14
         ldy #1 ; Y assigned to Player 1
         jsr SetObjectPosX ; Jump to subroutine
         
@@ -157,25 +171,17 @@ NextFrame:
         
         sta WSYNC ; Wait next Scanline
         sta HMOVE ; Apply fine position offset
-        
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Set 37 empty Scanlines for VBLANK
-; But this time just 35 because the Horizontal Positioning
-; took 2 already
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	ldx #33
-VBlankLoop:
-	sta WSYNC
-        dex
-        bne VBlankLoop
-
+	
+; turn off VBLANK
 	ldx #0
-	stx VBLANK ; turn off VBLANK
+        sta WSYNC ; Wait next Scanline
+	stx VBLANK 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Display the Scoreboard scanlines
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	lda #0 ; clear TIA registers before each new frame
+	; clear TIA registers before each new frame
+        lda #0 
 	sta PF0
         sta PF1
         sta PF2
@@ -195,6 +201,42 @@ ClearTIA:
 	dex
         bne ClearTIA
 
+	; Start drawing the score
+	ldx #DIGITS_HEIGHT
+ScoreDigitsLoop:
+	ldy TensDigitOffset ; Get the Tens Digit Offset for the score
+        lda DigitsGraphics,Y ; Search the Digit Graphic in the look-up table
+        and #%11110000 ; (#$F0) Remove the last 4bits (Ones) of the found Graphics
+        sta ScoreSprite ; Move the Score Tens Digit Graphic in a variable
+        
+        ldy OnesDigitOffset ; Get the Ones Digit Offset for the score
+        lda DigitsGraphics,Y ; Search the Digit Graphic in the look-up table
+        and #%00001111 ; (#$0F) Remove the 1st 4bits (Tens) of the found Graphics
+        
+        ora ScoreSprite ; Merge the Score Tens graphics with the Ones!
+        sta ScoreSprite ; Save the full Score Digit graphic (Tens and Ones) 
+        
+        sta WSYNC ; Wait for the end of the Scanline
+        sta PF1 ; Update the PF to display the Score Graphics
+        
+        ; Now get the Tens Digit Offset for the Timer
+        ; +1 because the Timer is in a contiguous memory position to the Score
+        ldy TensDigitOffset+1
+        sta DigitsGraphics,Y ; Search the Digit Graphic in the Look-up table
+        and #%11110000 ; (#$F0) Remove the last 4bits (Ones) of the graphics
+        sta TimerSprite ; Save the Timer Tens graphics in a variable
+        
+        ldy OnesDigitOffset+1 ; Get the Ones Digit Offset for the Timer
+        lda DigitsGraphics,Y ; Search the Digit Graphic in the Look-up table
+        and #%00001111 ; (#$0F) Remove the 1st 4bits (Tens) of the graphics
+        
+        ora TimerSprite ; Merge the Timer Tens and Ones graphics
+        sta TimerSprite ; Save the Timer full graphics (Tens and Ones) ;31
+        
+	dex
+        bne ScoreDigitsLoop
+	sta WSYNC
+        stx PF1
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Here starts the 96 visible Scanlines (because of 2-line drawing)
 ; But actually...84, because of the 20 empty scoreboard lines
@@ -625,13 +667,13 @@ PlayerColors3:
 ; Digit Graphics
 ;===============================================================================
         align 256
-Digits:
+DigitsGraphics:
       .byte %01110111          ; ### ###
       .byte %01010101          ; # # # #
       .byte %01010101          ; # # # #
       .byte %01010101          ; # # # #
       .byte %01110111          ; ### ###
-DIGITS_HEIGHT = . - Digits
+DIGITS_HEIGHT = . - DigitsGraphics
 
       .byte %00010001          ;   #   #
       .byte %00010001          ;   #   #
