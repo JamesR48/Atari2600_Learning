@@ -121,9 +121,6 @@ Start:
 NextFrame:
 	lsr SWCHB	; test Game Reset switch
         bcc Start	; reset?
-	
-        lda BGColor
-        sta COLUBK
         
 	lda #2
         sta WSYNC
@@ -146,8 +143,8 @@ NextFrame:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	ldx #31
 VBlankLoop:
-	sta WSYNC
         dex
+        sta WSYNC
         bne VBlankLoop
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -187,17 +184,17 @@ VBlankLoop:
 ; The Score/Timer digits will be drawn using 2 scanlines
 ; so they'll be stretched vertically (for readability)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	; clear TIA registers before each new frame
-        lda #0 
-	sta PF0
-        sta PF1
-        sta PF2
-        sta GRP0
-        sta GRP1
-        sta COLUBK
+	; clear TIA registers before each new frame 
+	stx PF0
+        stx PF1
+        stx PF2
+        stx GRP0
+        stx GRP1
         ; Set Control Playfield register to disable reflection (for Score)        
         ; CTRLPF Register (D0 = 0 means don't reflect)
-        sta CTRLPF
+        stx CTRLPF
+        
+        
         
         lda ScoreColor
         sta COLUPF
@@ -205,8 +202,8 @@ VBlankLoop:
 ; Display 5 empty scanlines above where the scoreboard goes
         ldx #5
 PrevScoreSpace:
-	sta WSYNC
 	dex
+        sta WSYNC
         bne PrevScoreSpace
 	
 	; Start drawing the score
@@ -280,6 +277,7 @@ PostScoreSpace:
 ; (192 - scoreboardlines[10]) / 2 [2-line drawing] = 91
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 DrawPlayfield:
+	sta WSYNC
         lda #02
         sta COLUBK
 	; CTRLPF Register (D0 = 1 means reflect)
@@ -328,15 +326,13 @@ GameScanlineLoop:
         dex
         bne GameScanlineLoop
         
-        sta WSYNC
         ; Reset values each frame
-        lda #$02
-        sta COLUBK ; Reset BG Color to grey
         lda #0
         sta PlayerAnimOffset ; Reset P0 Anim frames
-        lda #%00000000
-        sta REFP0 ; Set P0 to not reflect
-
+        sta WSYNC ; Wait for Horizontal Synchronization (next Scanline)
+        lda #$04        
+        sta COLUBK
+        
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Set 30 empty Scanlines for Overscan
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -344,7 +340,7 @@ GameScanlineLoop:
         lda #2
         sta VBLANK ; Turn on VBLANK
 OverscanLoop:
-	sta WSYNC
+	sta WSYNC ; Wait for Horizontal Synchronization (next Scanline)
         dex
         bne OverscanLoop
         
@@ -426,7 +422,7 @@ ResetDemonPosition:
         
 ; Fall back for the Position Update code        
 EndPositionUpdate:
-
+	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Check collisions before ending the frame
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -455,7 +451,6 @@ OnCollisionP0P1:
 ; Fall back for the collision checking        
 EndCollisionCheck:
 	sta CXCLR ; Always clear all collision flags before next frame
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Jump to next frame
