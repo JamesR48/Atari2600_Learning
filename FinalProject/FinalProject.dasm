@@ -15,6 +15,7 @@
 BGColor ds 1 ; Background color byte
 PFColor ds 1 ; Playfield color byte
 ScoreColor ds 1 ; Score-Playfield color byte
+DamageFXColor ds 1
 
 P0PosY ds 1 ; Defines 1 byte for Player0 sprite Vertical Position
 P0PosX ds 1 ; Defines 1 byte for Player0 sprite Horizontal Position
@@ -53,7 +54,7 @@ TempVar ds 1 ; Auxiliary variable to store temporary data (like Score values)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Define Constants
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-PO_HEIGHT equ #9
+P0_HEIGHT equ #9
 DEMON_HEIGHT equ #17
 DIGITS_HEIGHT equ #5 ; Scoreboard Digits height
 
@@ -79,6 +80,8 @@ Start:
         sty PFColor ; Set Playfield color to red
         lda #$1c
         sta ScoreColor ; Set Score-Playfield color to white
+        lda #$ff
+        sta DamageFXColor
         
 	lda #80
         sta P0PosX ; Set P0 initial Horizontal Position
@@ -194,8 +197,6 @@ VBlankLoop:
         ; CTRLPF Register (D0 = 0 means don't reflect)
         stx CTRLPF
         
-        
-        
         lda ScoreColor
         sta COLUPF
         
@@ -278,7 +279,7 @@ PostScoreSpace:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 DrawPlayfield:
 	sta WSYNC
-        lda #02
+        lda BGColor
         sta COLUBK
 	; CTRLPF Register (D0 = 1 means reflect)
 	lda #%00000001 
@@ -295,7 +296,7 @@ GameScanlineLoop:
 	txa ; transfer X to A
         sec ; Set Carry flag before subtracting
         sbc P0PosY ; Subtract P0 sprite Y coordinate - A
-        cmp PO_HEIGHT ; Are we inside the sprite height bounds?
+        cmp P0_HEIGHT ; Are we inside the sprite height bounds?
         bcc .DrawPlayer0 ; If result < SpriteHeight, draw player
         lda #0 ; Else, set index to 0, turning off P0 graphics
 .DrawPlayer0:
@@ -329,8 +330,9 @@ GameScanlineLoop:
         ; Reset values each frame
         lda #0
         sta PlayerAnimOffset ; Reset P0 Anim frames
+        sta REFP0 ; Set P0 Graphics to not reflect
         sta WSYNC ; Wait for Horizontal Synchronization (next Scanline)
-        lda #$04        
+        lda #$04 ; Set the Scoreboard BG color to light grey         
         sta COLUBK
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -359,21 +361,27 @@ CheckP0Up:
         ; bit is like Bitwise AND, but doesn't store
         ; the result, just raise flags
         bit SWCHA
-        bne CheckP0Down
-	inc P0PosY
+        bne CheckP0Down ; Not pressing Up? Check if pressing Down
+        lda #96-(P0_HEIGHT+4) ; 4 = P0_HEIGHT/2 aprox.
+        cmp P0PosY ; Is the player in the upper limit? Stop movement
+        beq CheckP0Down
+        inc P0PosY ; Move up
         
 CheckP0Down:
 	lda #%00100000
         bit SWCHA
-        bne CheckP0Left
-        dec P0PosY
-
+        bne CheckP0Left ; Not pressing Down? Check if pressing Left
+        lda #2 ; 2 = P0_HEIGHT/4 aprox.
+        cmp P0PosY ; Is the player in the lower limit? Stop movement
+        beq CheckP0Left
+        dec P0PosY ; Move down
+        
 CheckP0Left:
 	lda #%01000000
         bit SWCHA
         bne CheckP0Right
         dec P0PosX
-        lda PO_HEIGHT
+        lda P0_HEIGHT
         sta PlayerAnimOffset
 
 CheckP0Right:
@@ -381,7 +389,7 @@ CheckP0Right:
         bit SWCHA
         bne CheckP0Button
         inc P0PosX
-        lda PO_HEIGHT
+        lda P0_HEIGHT
         sta PlayerAnimOffset
         lda #%00001000
         sta REFP0
@@ -426,7 +434,6 @@ EndPositionUpdate:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Check collisions before ending the frame
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	
 CheckCollisionP0PF:
 	; CXP0FB bit 7 detects P0-PF collisions, bit 6 P0-Ball collisions
 	lda #%10000000
@@ -438,14 +445,19 @@ CheckCollisionP0P1:
 	lda #%10000000
         bit CXPPMM
         bne OnCollisionP0P1
-        
+        jsr ResetBGPFColors ; Reset BG and PF colors if no collision happens
         jmp EndCollisionCheck ; End collision checking if none happened
         
 OnCollisionP0PF:
 	jmp Start ; Restart the game when colliding with the PF
         
 OnCollisionP0P1:
-	; jsr GameOver
+	lda DemonPosY ;DEMON_HEIGHT
+        sec
+        sbc P0PosY
+        bne EndCollisionCheck
+	jsr GameOver
+        inc Score
 	;dec P0PosY
         
 ; Fall back for the collision checking        
@@ -515,7 +527,12 @@ NoEOR:
 ; Game Over Subroutine
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 GameOver subroutine
-	; Clear score and stuff
+	; Set the BG and PF to Damage color (like a flash)
+	lda DamageFXColor
+        sta BGColor
+        sta PFColor
+        ;lda #0 ; Reset Score
+        ;sta Score
 	rts
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -567,6 +584,16 @@ CalculateDigitOffset subroutine
         dex
         bpl .PrepareScore ; While X > 0, loop again
         rts
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Routine to reset the colors of the Background and Playfield
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ResetBGPFColors subroutine
+	lda #$02 ; BG to Grey
+        sta BGColor
+        lda #$35 ; PF to Red
+        sta PFColor
+	rts
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Sleep/Waste 12 CPU Cycles routine
@@ -643,7 +670,7 @@ PlayerFront:
 ; https://alienbill.com/2600/playerpalnext.html
 ; Dynamically calculating Sprite's height
 ; "." means "Current line"
-PO_HEIGHT = . - PlayerFront
+P0_HEIGHT = . - PlayerFront
 
 PlayerLeft:
 	.byte #%00000000 ; zero padding, also clears register 	
