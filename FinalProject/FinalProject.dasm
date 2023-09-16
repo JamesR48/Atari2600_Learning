@@ -19,9 +19,11 @@ DamageFXColor ds 1
 
 P0PosY ds 1 ; Defines 1 byte for Player0 sprite Vertical Position
 P0PosX ds 1 ; Defines 1 byte for Player0 sprite Horizontal Position
-
 DemonPosY ds 1 ; Defines 1 byte for Player0 sprite Vertical Position
 DemonPosX ds 1 ; Defines 1 byte for Player0 sprite Horizontal Position
+
+Missile0PosY ds 1
+Missile0PosX ds 1
 
 ; words are 2 bytes long
 ; memory addresses are stored in 2 bytes
@@ -108,6 +110,7 @@ Start:
         sta DemonColorPtr ; lo-byte pointer for color lookuptable
         lda #>DemonColors
         sta DemonColorPtr+1 ; hi-byte pointer for color lookuptable
+        ; https://forums.atariage.com/topic/93007-nusiz01-question/
         lda #%00000101 ; Double size Player 1
         sta NUSIZ1
         
@@ -117,6 +120,21 @@ Start:
         lda #0
         sta Score
         sta Timer
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Declare a Macro to check if a Missile should be displayed
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	MAC DRAW_MISSILE
+        lda #%00000000
+        ; Compare X (current scanline) with Missile Y Pos
+        cpx Missile0PosY
+        bne .DontDraw ; if(X != MissilePosY)
+.Draw:
+	lda #%00000010
+        inc Missile0PosY
+.DontDraw:
+        sta ENAM0
+        ENDM
         
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Start New Frame by configuring VBlank and VSync
@@ -170,6 +188,10 @@ VBlankLoop:
 
         ldy #1 ; Y assigned to Player 1
         jsr SetObjectPosX ; Jump to subroutine
+
+	lda Missile0PosX
+        ldy #2
+        jsr SetObjectPosX
 
 ; Calculate Scoreboard Digits look-up table offset
         jsr CalculateDigitOffset
@@ -291,6 +313,8 @@ DrawPlayfield:
 
         ldx #91 ; X will hold the remaining Scanlines
 GameScanlineLoop:
+	; Macro to check if missile should be drawn
+	DRAW_MISSILE
 
 .IsPlayer0InScreen:
 	txa ; transfer X to A
@@ -381,7 +405,7 @@ CheckP0Left:
         bit SWCHA
         bne CheckP0Right
         dec P0PosX
-        lda P0_HEIGHT
+        lda #P0_HEIGHT
         sta PlayerAnimOffset
 
 CheckP0Right:
@@ -389,7 +413,7 @@ CheckP0Right:
         bit SWCHA
         bne CheckP0Button
         inc P0PosX
-        lda P0_HEIGHT
+        lda #P0_HEIGHT
         sta PlayerAnimOffset
         lda #%00001000
         sta REFP0
@@ -398,10 +422,21 @@ CheckP0Button:
 	lda #%10000000
         bit INPT4 ;INPT4 register stores P0's button action
         bne NoInputPressed
-        inc BGColor
-        lda BGColor
-        sta COLUBK
 
+; Set Fist position
+	lda P0PosX
+        clc
+        adc #4
+        sta Missile0PosX
+        lda P0PosY
+        clc
+        adc #4
+        sta Missile0PosY
+         ; https://forums.atariage.com/topic/93007-nusiz01-question/
+        lda #%00010000 ; Double size Missile 0
+        sta NUSIZ0
+        
+        
 NoInputPressed:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -445,28 +480,41 @@ CheckCollisionP0P1:
 	lda #%10000000
         bit CXPPMM
         bne OnCollisionP0P1
-        jsr ResetBGPFColors ; Reset BG and PF colors if no collision happens
+       	jsr ResetBGPFColors ; Reset BG and PF colors if no collision happens
+
+CheckCollisionM0P1:
+	; CXM0P bit 7 detects M0-P1 collisions, bit 6 M0-P0 collisions
+	lda #%10000000
+        bit CXM0P
+        bne OnCollisionM0P1
         jmp EndCollisionCheck ; End collision checking if none happened
 
 OnCollisionP0PF:
 	jmp Start ; Restart the game when colliding with the PF
 
 OnCollisionP0P1:
-	lda DemonPosY ;DEMON_HEIGHT
+	lda DemonPosY
         sec
         sbc P0PosY
         bne EndCollisionCheck
 	jsr GameOver
-        
-        sed ; Set enable BCD (Binary Coding Mode) for the Score
+	;dec P0PosY
+        jmp EndCollisionCheck
+
+OnCollisionM0P1:
+	; Increase Score        
+        sed ; Set enable BCD (Binary Coded Decimal) for the Score
         lda Score
         clc ; Clear Carry before addition
         adc #1 ; Add 1 to A
         sta Score ; Save the incremented score
         cld ; Clear/Disable the BCD
-        
-        ;inc Score ;  INC doesn't work well with BCD
-	;dec P0PosY
+        ; INC will always return a binary result regardless
+        ; of the D flag value (Decimal mode On or Off)
+        ;inc Score
+        lda #0
+        sta Missile0PosY
+        jsr GameOver
 
 ; Fall back for the collision checking        
 EndCollisionCheck:
