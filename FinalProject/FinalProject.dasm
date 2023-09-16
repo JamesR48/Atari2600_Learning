@@ -320,7 +320,7 @@ GameScanlineLoop:
 	txa ; transfer X to A
         sec ; Set Carry flag before subtracting
         sbc P0PosY ; Subtract P0 sprite Y coordinate - A
-        cmp P0_HEIGHT ; Are we inside the sprite height bounds?
+        cmp #P0_HEIGHT ; Are we inside the sprite height bounds?
         bcc .DrawPlayer0 ; If result < SpriteHeight, draw player
         lda #0 ; Else, set index to 0, turning off P0 graphics
 .DrawPlayer0:
@@ -337,7 +337,7 @@ GameScanlineLoop:
 	txa ; transfer X to A
         sec ; Set Carry flag before subtracting
         sbc DemonPosY ; Subtract P0 sprite Y coordinate - A
-        cmp DEMON_HEIGHT ; Are we inside the sprite height bounds?
+        cmp #DEMON_HEIGHT ; Are we inside the sprite height bounds?
         bcc .DrawDemon ; If result < SpriteHeight, draw player
         lda #0 ; Else, set index to 0, turning off P0 graphics
 .DrawDemon:
@@ -422,7 +422,7 @@ CheckP0Button:
 	lda #%10000000
         bit INPT4 ;INPT4 register stores P0's button action
         bne NoInputPressed
-
+	
 ; Set Fist position
 	lda P0PosX
         clc
@@ -487,6 +487,12 @@ CheckCollisionM0P1:
 	lda #%10000000
         bit CXM0P
         bne OnCollisionM0P1
+        
+        lda #%00000000
+        sta AUDV0
+        sta AUDF0
+        sta AUDC0
+        
         jmp EndCollisionCheck ; End collision checking if none happened
 
 OnCollisionP0PF:
@@ -515,6 +521,13 @@ OnCollisionM0P1:
         lda #0
         sta Missile0PosY
         jsr GameOver
+        
+        lda #%00000011
+        sta AUDV0
+        lda #%00011111
+        sta AUDF0
+        lda #%00001000
+        sta AUDC0
 
 ; Fall back for the collision checking        
 EndCollisionCheck:
