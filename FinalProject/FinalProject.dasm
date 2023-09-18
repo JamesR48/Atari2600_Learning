@@ -196,6 +196,8 @@ VBlankLoop:
 ; Calculate Scoreboard Digits look-up table offset
         jsr CalculateDigitOffset
 
+	jsr GenerateConstantSound
+
         sta WSYNC ; Wait next Scanline
         sta HMOVE ; Apply fine position offset
 
@@ -454,7 +456,7 @@ UpdateDemonPosition:
 ResetDemonPosition:
 	lda #96 ; Because of 2-line kernel, #96 is the screen top Scanline
         sta DemonPosY
-
+        
         jsr RandomNumGenerator
         and #97
         clc
@@ -522,11 +524,11 @@ OnCollisionM0P1:
         sta Missile0PosY
         jsr GameOver
         
-        lda #%00000011
+        lda #4
         sta AUDV0
-        lda #%00011111
+        lda #0
         sta AUDF0
-        lda #%00001000
+        lda #6
         sta AUDC0
 
 ; Fall back for the collision checking        
@@ -670,6 +672,55 @@ ResetBGPFColors subroutine
 ; rts takes another 6 cycles
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Sleep12Cycles subroutine
+	rts
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Playing a looping sound through the whole game routine
+; changing it based on Gameplay events
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GenerateConstantSound subroutine
+	; If you want a full technical description of these AUDC values, these are the reference materials that I usually use:
+        ; 1.) https://alienbill.com/2600/cookbook/music/stolberg.txt (by Eckhard Stolberg)
+        ; 2.) https://alienbill.com/2600/basic/music/ (by Alien Bill)
+        
+        ; Audio Programs
+        ; 1.) https://alienbill.com/2600/basic/music/tune2600.html
+        ; 2.) https://bitbucket.org/kylearan/tiatracker/src/master/
+        ; 2's Manual: https://bitbucket.org/kylearan/tiatracker/raw/master/data/TIATracker_manual.pdf
+        
+        ; AUDV0 controls the volume, 0=quiet / 15=loudest
+        lda #1
+        sta AUDV0
+        
+        ; AUDF0 controls the pitch/frequency, 0=highest / 31=lowest
+	; Here the pitch will change based on Demon's Y movement
+        ; The nearest he's to lower screen bound, the lower the pitch
+        ; 31 - (YPos/8)
+        lda DemonPosY
+        clc
+        adc #4
+        lsr ; Logical Shift Right, divide by 2
+        lsr ; divide by 4
+        lsr ; divide by 8
+        sta TempVar ; Store the result (Y/8) in the Temp variable
+        lda #31
+        sec
+        sbc TempVar ; 31 - (Y/8)
+        sta AUDF0
+        
+        ; AUDC0 is the tone type
+        ; 0,11 = Silent
+        ; 1 = Buzz
+       	; 2,3 = Rumble
+        ; 4,5 = Pure Tone (Sine wave)
+        ; 6,10 = Square Wave
+        ; 7,9 = Buzz
+        ; 8 = White Noise
+        ; 12,13 = Pure Tone (Sine wave)
+        ; 14 = Square wave
+        ; 15 = Buzz
+        lda #1
+        sta AUDC0
 	rts
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
